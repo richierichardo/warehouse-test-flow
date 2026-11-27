@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan login, katalog barang, penerimaan, dan kartu stok masuk dengan navigasi sesuai role. Petugas gudang dapat mengelola metadata barang dan mencatat penerimaan. Superadmin dapat membaca riwayat penerimaan dan kartu stok. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan login, katalog barang, penerimaan, kartu stok masuk dan pengajuan karyawan, dengan navigasi sesuai role. Petugas gudang mengelola metadata barang dan mencatat penerimaan. Petugas dan superadmin dapat membaca antrean permintaan. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -80,7 +80,7 @@ Permintaan dan penerimaan yang berhasil dibuat tidak diedit/dihapus melalui MVP.
 | `src/app/api/auth/[...all]/route.ts` | Handler Better Auth dengan guard transport |
 | `src/app/api/items/` | Endpoint katalog |
 | `src/app/api/receipts/` | Endpoint penerimaan |
-| `src/app/api/requests/` | Endpoint permintaan dan keputusan |
+| `src/app/api/requests/` | Daftar, detail, dan pembuatan permintaan |
 | `src/app/api/admin/users/` | Endpoint akses akun |
 | `src/modules/<domain>/` | Service, repository, schema, DTO per domain |
 | `src/lib/auth.ts` | Konfigurasi Better Auth server-only |
@@ -147,7 +147,7 @@ Request POST memerlukan `Origin` yang sama dengan `APP_ORIGIN`. Set `BETTER_AUTH
 
 Ruang kerja memeriksa session dan izin di server pada setiap halaman. Karyawan melihat menu Katalog dan Permintaan Saya. Petugas gudang melihat Katalog, Penerimaan, Permintaan, dan Kartu Stok. Superadmin mendapat area baca untuk operasi gudang serta menu Akun dan Audit. Halaman yang modulnya masih dijadwalkan menampilkan status belum tersedia.
 
-`withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL untuk endpoint katalog. Repository permintaan menyediakan scope pemilik untuk daftar dan detail yang dipakai pada tahap 07.
+`withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL untuk endpoint bisnis. Repository permintaan menerapkan scope pemilik pada daftar, jumlah hasil, dan detail karyawan.
 
 ### Katalog barang
 
@@ -173,7 +173,19 @@ Petugas membuka **Penerimaan → Catat penerimaan**, memilih satu barang dari ha
 
 Jumlah berupa integer JSON antara 1 dan 1.000.000. Saldo maksimal 2.000.000.000. Tanggal dokumen memakai `YYYY-MM-DD` dan boleh lebih awal dari hari posting. Server merapikan teks dan memakai `null` untuk field opsional kosong sebelum menghitung hash dari enam field payload dalam urutan tetap. Form mempertahankan key saat mengulang pengiriman dengan isian yang sama. Pendataan tanggal mundur tetap mengikuti urutan posting kartu stok.
 
-## Pemeriksaan tahap 06
+### Permintaan karyawan
+
+Karyawan membuka **Permintaan Saya → Buat permintaan** dan memilih barang dari katalog. Jumlah yang melebihi stok terakhir tetap bisa diajukan. Pengajuan tersimpan dengan status **Menunggu** dan saldo tetap tersedia untuk persetujuan pada tahap 08. Petugas gudang dan superadmin dapat membuka daftar dan detail seluruh permintaan.
+
+| Endpoint | Kontrak |
+| --- | --- |
+| `POST /api/requests` | Khusus karyawan. Kirim `itemId`, `quantity` sebagai integer 1–1.000.000, dan `notes` opsional maksimal 500 karakter. Header `Idempotency-Key` wajib UUID. Sukses baru `201`, pengulangan payload setara `200`, konflik key `409`. |
+| `GET /api/requests` | Scope sesuai role. Filter `status` dengan nilai `PENDING`, `APPROVED`, atau `REJECTED`, serta `page` dan `limit`. Default 20 dan maksimum 100 hasil per halaman. Permintaan terbaru ditampilkan lebih dahulu. |
+| `GET /api/requests/:id` | Detail termasuk catatan dan informasi keputusan yang tersedia. ID yang tidak ditemukan atau berada di luar scope pemohon menghasilkan `404`. |
+
+Satu key berlaku per pemohon. UUID barang, jumlah, dan catatan yang sudah dirapikan menjadi isi hash payload. Form mempertahankan key ketika pengiriman dengan isian yang sama diulang dari form tersebut. Catatan permintaan tersedia di detail.
+
+## Pemeriksaan tahap 07
 
 ```bash
 npm run lint
@@ -194,9 +206,9 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog dan penerimaan memakai Route Handler produksi dan PostgreSQL. Tes penerimaan menahan transaksi independen untuk membuktikan perilaku retry paralel dan konflik key, serta menyuntikkan kegagalan insert ledger untuk membuktikan rollback. Tes RBAC memakai server HTTP fixture untuk memeriksa guard dan filter kepemilikan.
+Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog, penerimaan dan permintaan memakai Route Handler produksi dan PostgreSQL. Tes penerimaan serta permintaan memakai transaksi independen untuk memeriksa retry paralel dan konflik key. Tes penerimaan juga menyuntikkan kegagalan insert ledger untuk membuktikan rollback. Tes permintaan memeriksa isolasi daftar, jumlah hasil, dan detail antarpegawai.
 
-`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai fixture sementara untuk menguji auth, katalog, pengiriman ulang form penerimaan, kartu stok di ponsel, dan akses baca superadmin. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
+`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memeriksa auth, katalog, penerimaan, kartu stok, pengajuan di ponsel, dan akses riwayat sesudah login ulang. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
 
 ### Proxy Nginx untuk produksi
 

@@ -5,10 +5,10 @@ import type { CatalogItem } from "@/modules/catalog/schema";
 import { inputClass, secondaryClass } from "./operations-styles";
 import { useHydrated } from "./use-hydrated";
 
-type ItemOption = Pick<CatalogItem, "id" | "code" | "name" | "unit">;
+type ItemOption = Pick<CatalogItem, "id" | "code" | "name" | "unit" | "stock">;
 type ItemSelection = Pick<ItemOption, "id"> & Partial<ItemOption>;
 
-export function CatalogItemPicker({ initialItem }: { initialItem?: ItemSelection }) {
+export function CatalogItemPicker({ initialItem, onSelect }: { initialItem?: ItemSelection; onSelect?: (item: ItemOption | undefined) => void }) {
   const hydrated = useHydrated();
   const searchId = useId();
   const [query, setQuery] = useState("");
@@ -64,7 +64,7 @@ export function CatalogItemPicker({ initialItem }: { initialItem?: ItemSelection
           {items.map((item) => (
             <li key={item.id}>
               <button type="button" aria-pressed={item.id === selected?.id} className="w-full wrap-anywhere px-3 py-2 text-left text-sm hover:bg-slate-50 aria-pressed:bg-teal-50"
-                onClick={() => { setSelected(item); setItems([]); setMessage(""); }}>
+                onClick={() => { setSelected(item); setItems([]); setMessage(""); onSelect?.(item); }}>
                 {item.code} · {item.name} · {item.unit}
               </button>
             </li>
@@ -77,7 +77,7 @@ export function CatalogItemPicker({ initialItem }: { initialItem?: ItemSelection
           <p role="status" className="min-w-0 flex-1 wrap-anywhere">
             {selected.name ? `${selected.code} · ${selected.name} · ${selected.unit}` : `Barang ${selected.id}`}
           </p>
-          <button type="button" disabled={!hydrated} className="p-2 font-medium underline" onClick={() => setSelected(undefined)}>Hapus pilihan</button>
+          <button type="button" disabled={!hydrated} className="p-2 font-medium underline" onClick={() => { setSelected(undefined); onSelect?.(undefined); }}>Hapus pilihan</button>
         </div>
       )}
     </div>

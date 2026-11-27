@@ -12,6 +12,7 @@ const users = (["EMPLOYEE", "WAREHOUSE", "SUPERADMIN"] as const).map((role) => (
 const password = randomBytes(24).toString("hex");
 const catalogCode = `BROWSER-A4-${randomBytes(4).toString("hex").toUpperCase()}`;
 const catalogName = `Kertas A4 ${catalogCode}`;
+const fixtureRequestNo = `FIXTURE-${randomUUID()}`;
 let db: PrismaClient;
 
 test.beforeAll(async () => {
@@ -23,6 +24,8 @@ test.beforeAll(async () => {
   } } } })));
   const item = await db.item.create({ data: { code: catalogCode, name: catalogName, unit: "RIM", location: "Rak 1", createdById: users[1].id } });
   await receiveFixtureStock(db, item.id, users[1].id, 1_250);
+  await db.itemRequest.create({ data: { itemId: item.id, requesterId: users[0].id, quantity: 1,
+    requestNo: fixtureRequestNo, idempotencyKey: randomUUID(), payloadHash: "fixture" } });
 });
 
 test.afterAll(async () => {
@@ -92,6 +95,17 @@ for (const user of users) {
     } else {
       await expect(addButton).toHaveCount(0);
       await page.goto("/katalog/baru");
+      await expect(page).toHaveURL("/akses-ditolak");
+    }
+
+    if (user.role !== "EMPLOYEE") {
+      await page.goto("/permintaan");
+      await expect(page.getByRole("heading", { name: "Permintaan", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Buat permintaan" })).toHaveCount(0);
+      await page.getByRole("link", { name: fixtureRequestNo }).click();
+      await expect(page.getByRole("heading", { name: fixtureRequestNo })).toBeVisible();
+      await expect(page.getByText(users[0].name, { exact: true })).toBeVisible();
+      await page.goto("/permintaan/baru");
       await expect(page).toHaveURL("/akses-ditolak");
     }
 
@@ -234,4 +248,56 @@ test("superadmin membaca penerimaan dan kartu stok dengan akses baca", async ({ 
   await expect(page.getByText("+1.250 RIM", { exact: true })).toBeVisible();
   await page.goto("/penerimaan/baru");
   await expect(page).toHaveURL("/akses-ditolak");
+});
+
+test("karyawan mengajukan barang melebihi stok dan melihat permintaan setelah login ulang", async ({ page }) => {
+  test.setTimeout(155_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, users[0].email);
+  await page.getByRole("navigation", { name: "Navigasi ruang kerja" }).getByRole("link", { name: "Permintaan Saya" }).click();
+  await page.getByRole("link", { name: "Buat permintaan", exact: true }).click();
+  await page.getByLabel("Cari barang berdasarkan kode atau nama").fill(catalogCode);
+  await page.getByRole("button", { name: "Cari barang", exact: true }).click();
+  await page.getByRole("button", { name: `${catalogCode} · ${catalogName} · RIM` }).click();
+  await page.getByLabel("Jumlah", { exact: true }).fill("1500");
+  await page.getByLabel("Catatan (opsional)").fill("Perlengkapan rapat browser");
+  await expect(page.getByText("Jumlah melebihi stok saat ini.", { exact: false })).toBeVisible();
+
+  let key: string | undefined;
+  await page.route("**/api/requests", async (route) => {
+    key = route.request().headers()["idempotency-key"];
+    await route.fulfill({ status: 429, headers: { "Retry-After": "1" }, json: {} });
+  });
+  await page.getByRole("button", { name: "Kirim permintaan" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Coba lagi setelah 1 detik." })).toBeVisible();
+  expect(key).toMatch(/^[a-f\d-]{36}$/i);
+  await page.unroute("**/api/requests");
+
+  const [response] = await Promise.all([
+    page.waitForResponse((result) => new URL(result.url()).pathname === "/api/requests" && result.request().method() === "POST", { timeout: 35_000 }),
+    page.getByRole("button", { name: "Kirim permintaan" }).click(),
+  ]);
+  expect(response.status()).toBe(201);
+  expect(response.request().headers()["idempotency-key"]).toBe(key);
+  const { data: { id, requestNo } } = await response.json();
+  await expect(page.getByRole("heading", { name: "Permintaan tersimpan" })).toBeVisible();
+  await page.getByRole("link", { name: "Lihat detail permintaan" }).click();
+  await expect(page).toHaveURL(`/permintaan/${id}`);
+  await expect(page.getByRole("heading", { name: requestNo })).toBeVisible();
+  await expect(page.getByText("Menunggu", { exact: true })).toBeVisible();
+  await expect(page.getByText("Perlengkapan rapat browser", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  await page.getByRole("button", { name: "Keluar" }).click();
+  await expect(page).toHaveURL("/login");
+  await page.goto(`/permintaan/${id}`);
+  await expect(page).toHaveURL("/login");
+  await login(page, users[0].email);
+  await page.getByRole("link", { name: "Permintaan Saya" }).click();
+  const status = page.getByRole("combobox", { name: "Status", exact: true });
+  await expect(status).toBeVisible();
+  await status.selectOption("PENDING");
+  await page.getByRole("button", { name: "Terapkan filter" }).click();
+  await expect(page).toHaveURL("/permintaan?status=PENDING");
+  await expect(page.getByRole("link", { name: requestNo })).toBeVisible();
 });
