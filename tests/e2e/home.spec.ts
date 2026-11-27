@@ -3,12 +3,15 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { expect, test, type Page } from "@playwright/test";
 import { hashPassword } from "better-auth/crypto";
 import { PrismaClient } from "../../src/generated/prisma/client";
+import { deleteCatalogFixtures, receiveFixtureStock } from "../catalog-fixture";
 import { testDatabaseUrl } from "../integration/database";
 
 const users = (["EMPLOYEE", "WAREHOUSE", "SUPERADMIN"] as const).map((role) => ({
   id: randomUUID(), email: `${randomUUID()}@example.test`, name: `Fixture ${role}`, role,
 }));
 const password = randomBytes(24).toString("hex");
+const catalogCode = `BROWSER-A4-${randomBytes(4).toString("hex").toUpperCase()}`;
+const catalogName = `Kertas A4 ${catalogCode}`;
 let db: PrismaClient;
 
 test.beforeAll(async () => {
@@ -18,15 +21,19 @@ test.beforeAll(async () => {
   await db.$transaction(users.map((user) => db.user.create({ data: { ...user, accounts: { create: {
     id: randomUUID(), accountId: user.id, providerId: "credential", password: hash,
   } } } })));
+  const item = await db.item.create({ data: { code: catalogCode, name: catalogName, unit: "RIM", location: "Rak 1", createdById: users[1].id } });
+  await receiveFixtureStock(db, item.id, users[1].id, 1_250);
 });
 
 test.afterAll(async () => {
   if (!db) return;
   try {
+    await deleteCatalogFixtures(db, users[1].id);
     await db.user.deleteMany({ where: { id: { in: users.map(({ id }) => id) } } });
     const secret = process.env.WAREHOUSE_E2E_RATE_SECRET;
     if (secret) {
-      const keys = ["login", "auth"].map((bucket) => createHmac("sha256", secret).update(`${bucket}\0shared`).digest("hex"));
+      const identities = ["login\0shared", "auth\0shared", ...users.map(({ id }) => `write\0${id}`)];
+      const keys = identities.map((identity) => createHmac("sha256", secret).update(identity).digest("hex"));
       await db.rateLimitBucket.deleteMany({ where: { keyHash: { in: keys } } });
     }
   } finally {
@@ -52,8 +59,16 @@ const expectedMenus = {
   SUPERADMIN: ["Katalog", "Penerimaan", "Permintaan", "Kartu Stok", "Akun", "Audit"],
 };
 
+async function searchCatalog(page: Page, query: string) {
+  await page.getByLabel("Cari kode atau nama").fill(query);
+  await page.getByRole("button", { name: "Cari", exact: true }).click();
+  await expect(page).toHaveURL(/\/katalog\?q=/);
+}
+
 for (const user of users) {
   test(`${user.role} masuk dan melihat navigasi sesuai izin`, async ({ page }) => {
+    test.setTimeout(105_000);
+    if (user.role === "EMPLOYEE") await page.setViewportSize({ width: 390, height: 844 });
     await login(page, user.email);
     const nav = page.getByRole("navigation", { name: "Navigasi ruang kerja" });
     await expect(nav.getByRole("link")).toHaveText(expectedMenus[user.role]);
@@ -61,7 +76,24 @@ for (const user of users) {
     await expect(page).toHaveURL("/katalog");
     await expect(page.getByRole("heading", { name: "Katalog" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Katalog" })).toHaveAttribute("aria-current", "page");
-    await expect(page.getByText("Fitur ini belum tersedia.")).toBeVisible();
+    await searchCatalog(page, catalogCode.toLowerCase());
+    await expect(page.getByText(catalogName, { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText("1.250", { exact: true }).filter({ visible: true })).toBeVisible();
+    if (user.role === "EMPLOYEE") {
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    }
+    const addButton = page.getByRole("link", { name: "Tambah barang" });
+    if (user.role === "WAREHOUSE") {
+      await expect(addButton).toBeVisible();
+      await page.getByRole("link", { name: `Edit ${catalogName}` }).filter({ visible: true }).click();
+      await expect(page.getByLabel("Kode barang")).toHaveAttribute("readonly", "");
+      await expect(page.getByLabel("Satuan")).toHaveAttribute("readonly", "");
+      await expect(page.getByLabel("Nama barang")).toBeEditable();
+    } else {
+      await expect(addButton).toHaveCount(0);
+      await page.goto("/katalog/baru");
+      await expect(page).toHaveURL("/akses-ditolak");
+    }
 
     await page.goto("/admin/akun");
     if (user.role === "SUPERADMIN") {
@@ -70,7 +102,7 @@ for (const user of users) {
       await expect(page).toHaveURL("/akses-ditolak");
       await expect(page.getByRole("heading", { name: "Akses ditolak" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Akun" })).toHaveCount(0);
-      await page.goto("/");
+      await page.goto("/katalog");
     }
     await page.getByRole("button", { name: "Keluar" }).click();
     await expect(page).toHaveURL("/login");
@@ -78,6 +110,42 @@ for (const user of users) {
     await expect(page).toHaveURL("/login");
   });
 }
+
+test("petugas membuat barang dengan stok nol dan mengedit metadata dari katalog", async ({ page }) => {
+  test.setTimeout(105_000);
+  const code = `BROWSER-NEW-${randomBytes(4).toString("hex").toUpperCase()}`;
+  const name = `Buku tulis ${code}`;
+  await login(page, users[1].email);
+  await page.getByRole("link", { name: "Katalog" }).click();
+  await page.getByRole("link", { name: "Tambah barang" }).click();
+  await page.getByLabel("Kode barang").fill(code.toLowerCase());
+  await page.getByLabel("Nama barang").fill(name);
+  await page.getByLabel("Satuan").fill("PCS");
+  await page.getByLabel("Lokasi rak").fill("Rak baru");
+  const [created] = await Promise.all([
+    page.waitForResponse((result) => new URL(result.url()).pathname === "/api/items" && result.request().method() === "POST", { timeout: 40_000 }),
+    page.getByRole("button", { name: "Simpan barang" }).click(),
+  ]);
+  expect(created.status()).toBe(201);
+  await expect(page).toHaveURL("/katalog");
+  await searchCatalog(page, code);
+  const row = page.getByRole("row", { name: new RegExp(name) });
+  await expect(row.getByRole("cell", { name: "0", exact: true })).toBeVisible();
+  await row.getByRole("link", { name: `Edit ${name}` }).click();
+  await expect(page.getByLabel("Kode barang")).toHaveValue(code);
+  await page.getByLabel("Satuan").fill("BOX");
+  await page.getByLabel("Lokasi rak").fill("Rak B");
+  const [updated] = await Promise.all([
+    page.waitForResponse((result) => new URL(result.url()).pathname.startsWith("/api/items/") && result.request().method() === "PATCH", { timeout: 40_000 }),
+    page.getByRole("button", { name: "Simpan barang" }).click(),
+  ]);
+  expect(updated.status()).toBe(200);
+  await expect(page).toHaveURL("/katalog");
+  await searchCatalog(page, code);
+  await expect(row.getByRole("cell", { name: "BOX", exact: true })).toBeVisible();
+  await expect(row.getByRole("cell", { name: "Rak B", exact: true })).toBeVisible();
+  await expect(row.getByRole("cell", { name: "0", exact: true })).toBeVisible();
+});
 
 test("menampilkan login dan sesi kedaluwarsa dengan ruang kerja yang pas di ponsel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

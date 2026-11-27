@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan halaman login, ruang kerja dengan navigasi sesuai role, schema PostgreSQL, dan CLI seed. Fitur operasional tersedia bertahap mulai dari katalog pada tahap 05. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan login, katalog barang, ruang kerja dengan navigasi sesuai role, schema PostgreSQL, dan CLI seed. Petugas gudang dapat menambah barang dan mengedit metadata katalog. Penerimaan barang dijadwalkan pada tahap 06. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -147,9 +147,21 @@ Request POST memerlukan `Origin` yang sama dengan `APP_ORIGIN`. Set `BETTER_AUTH
 
 Ruang kerja memeriksa session dan izin di server pada setiap halaman. Karyawan melihat menu Katalog dan Permintaan Saya. Petugas gudang melihat Katalog, Penerimaan, Permintaan, dan Kartu Stok. Superadmin mendapat area baca untuk operasi gudang serta menu Akun dan Audit. Halaman yang modulnya masih dijadwalkan menampilkan status belum tersedia.
 
-`withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL. Gunakan helper ini mulai dari endpoint katalog tahap 05. Repository permintaan menyediakan scope pemilik untuk daftar dan detail yang dipakai pada tahap 07.
+`withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL untuk endpoint katalog. Repository permintaan menyediakan scope pemilik untuk daftar dan detail yang dipakai pada tahap 07.
 
-## Pemeriksaan tahap 04
+### Katalog barang
+
+Semua role bisa membuka `/katalog` untuk mencari berdasarkan kode atau nama, mengurutkan hasil, dan melihat stok. Petugas gudang dapat memakai **Tambah barang** atau **Edit** pada baris barang. Stok awal adalah nol. Setelah ada permintaan atau mutasi, petugas masih bisa mengedit nama dan lokasi rak.
+
+| Endpoint | Kontrak |
+| --- | --- |
+| `GET /api/items` | Filter `q`, `page`, `limit`, `sort`, dan `direction`. Default `20` hasil per halaman, maksimum `100`. Pilihan urutan `code`, `name`, atau `stock`. |
+| `POST /api/items` | Petugas Gudang membuat barang dengan `code`, `name`, `unit`, dan `location`. Sukses `201`. |
+| `PATCH /api/items/:id` | Petugas Gudang mengedit minimal satu field metadata. Kode ganda atau perubahan kode/satuan setelah ada histori menghasilkan `409`. |
+
+Kode dinormalisasi ke huruf kapital. Batas panjang untuk kode, nama, satuan, dan lokasi masing-masing 64, 160, 32, dan 120 karakter setelah dirapikan. Metadata pagination berada pada `meta` dengan field `page`, `limit`, `total`, dan `totalPages`.
+
+## Pemeriksaan tahap 05
 
 ```bash
 npm run lint
@@ -170,9 +182,9 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes RBAC menggunakan server HTTP fixture dan PostgreSQL untuk memeriksa izin, filter kepemilikan, serta kuota bisnis.
+Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog memakai Route Handler produksi dan PostgreSQL untuk menguji izin, kode ganda, serta penguncian histori. Tes RBAC memakai server HTTP fixture untuk memeriksa guard dan filter kepemilikan.
 
-`npm run test:e2e` memakai `TEST_DATABASE_URL` yang sama dan menyalakan Next.js development pada `127.0.0.1:3100`. Playwright menyusun akun fixture sementara untuk menguji login, navigasi, logout, dan sesi kedaluwarsa di browser. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
+`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai fixture sementara untuk menguji auth, pencarian katalog, serta tambah dan edit barang. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
 
 ### Proxy Nginx untuk produksi
 

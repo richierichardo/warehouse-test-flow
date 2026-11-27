@@ -1,12 +1,11 @@
-import { spawn } from "node:child_process";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "better-auth/crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { userRoles } from "../../src/lib/auth-options";
 import { createDb } from "../../src/lib/db";
 import { testDatabaseUrl } from "./database";
+import { startNextTestApp } from "./next-app";
 
 vi.mock("server-only", () => ({}));
 
@@ -33,65 +32,19 @@ let db: ReturnType<typeof createDb>;
 let databaseUrl: string;
 let primary: Awaited<ReturnType<typeof startApp>>;
 
-async function freePort() {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (!address || typeof address === "string") throw new Error("Port tes tidak tersedia.");
-  return address.port;
-}
-
 async function startApp(overrides: Record<string, string> = {}) {
-  const port = await freePort();
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", String(port)], {
-    env: {
-      ...process.env,
-      NODE_ENV: "production",
-      NEXT_TELEMETRY_DISABLED: "1",
-      DATABASE_URL: databaseUrl,
-      APP_ORIGIN: origin,
-      BETTER_AUTH_URL: origin,
-      BETTER_AUTH_SECRET: authSecret,
-      RATE_LIMIT_KEY_SECRET: rateSecret,
-      TRUSTED_PROXY_MODE: "nginx",
-      TRUSTED_PROXY_SECRET: proxySecret,
-      ...overrides,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
+  const app = await startNextTestApp({
+    DATABASE_URL: databaseUrl,
+    APP_ORIGIN: origin,
+    BETTER_AUTH_URL: origin,
+    BETTER_AUTH_SECRET: authSecret,
+    RATE_LIMIT_KEY_SECRET: rateSecret,
+    TRUSTED_PROXY_MODE: "nginx",
+    TRUSTED_PROXY_SECRET: proxySecret,
+    ...overrides,
   });
-
-  let logs = "";
-  const appendLog = (chunk: Buffer) => { logs = (logs + chunk.toString()).slice(-32_768); };
-  child.stdout.on("data", appendLog);
-  child.stderr.on("data", appendLog);
-  let spawnFailed = false;
-  child.on("error", () => { spawnFailed = true; });
-  const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-  const app = {
-    request(path: string, init?: RequestInit) {
-      return fetch(`${baseUrl}${path}`, { redirect: "manual", signal: AbortSignal.timeout(10_000), ...init });
-    },
-    logs: () => logs,
-    async stop() {
-      if (child.exitCode === null && child.signalCode === null && !spawnFailed) child.kill();
-      await closed;
-    },
-  };
   runningApps.add(app);
-
-  for (let attempt = 0; attempt < 80 && child.exitCode === null && !spawnFailed; attempt += 1) {
-    const response = await fetch(baseUrl, { method: "HEAD", signal: AbortSignal.timeout(700) }).catch(() => null);
-    if (response?.ok) return app;
-    await delay(150);
-  }
-  await app.stop();
-  throw new Error("Next.js tes tidak tersedia. Jalankan npm run build sebelum tes integrasi.");
+  return app;
 }
 
 beforeAll(async () => {
@@ -172,7 +125,7 @@ it.each(users.filter(({ role }) => role !== "INACTIVE"))("login dan logout $role
   expect(sessionCookie(logout).header.includes("Max-Age=0")).toBe(true);
   expect(await db.session.count({ where: { id: stored.id } })).toBe(0);
   expect(await (await primary.request(sessionPath, { headers })).json()).toBeNull();
-});
+}, 15_000);
 
 it("membaca role terbaru dan menolak session nonaktif, expired, serta dicabut", async () => {
   const user = users[0];

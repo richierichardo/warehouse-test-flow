@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–04 sudah diimplementasikan. Tahap 05–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–05 sudah diimplementasikan. Tahap 06–10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
@@ -72,7 +72,7 @@ Mode `direct` memakai bucket bersama. Mode `nginx` menggunakan header IP yang di
 
 ## Tahap 04 — RBAC, ownership, shell UI
 
-Status: DONE | Commit: menunggu review pemilik repo
+Status: DONE | Commit: `209a78a`
 
 **Kerja**
 - Permission map tiga role dan helper deny-by-default; ownership employee pada repository query.
@@ -91,7 +91,7 @@ Guard bisnis, scope pemilik permintaan, dan kuota per akun diuji melalui server 
 
 ## Tahap 05 — Katalog
 
-Status: TODO | Commit: `feat: implement catalog with zero opening stock`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **Kerja**
 - List/search/pagination katalog dan form create/edit gudang.
@@ -103,20 +103,40 @@ Status: TODO | Commit: `feat: implement catalog with zero opening stock`
 - AC04 dan batas validasi metadata; akses role benar; saldo tidak dapat diubah melalui patch tambahan.
 - Tabel usable di desktop/ponsel; tanggal/angka konsisten bahasa Indonesia.
 
+Katalog mendukung pencarian literal kode/nama tanpa membedakan huruf besar dan kecil, pengurutan kode/nama/stok, dan pagination. Semua role dapat membaca katalog. Form tambah dan edit menggunakan Route Handler yang hanya mengizinkan petugas gudang. PostgreSQL memberi stok awal nol dan mencegah kode ganda setelah normalisasi, sementara identitas pembuat berasal dari session.
+
+Edit kode atau satuan mengunci baris barang terlebih dahulu, lalu memeriksa histori permintaan dan mutasi dalam transaksi. Nama dan lokasi tetap bisa diedit. Tes HTTP menggunakan koneksi PostgreSQL independen untuk memverifikasi pembuatan dengan kode yang sama dan edit yang berlangsung bersamaan dengan penyimpanan histori.
+
 ## Tahap 06 — Penerimaan dan kartu stok masuk
 
 Status: TODO | Commit: `feat: record idempotent receipts and incoming movements`
 
-**Kerja**
-- Form satu barang, qty, received_on, asal barang, surat jalan opsional, catatan.
-- Transaksi receiving + lock item + batas saldo + receipt + IN ledger; parameterized SQL untuk row lock.
-- Idempotency-Key/payload hash/replay/conflict, termasuk race insert unique dan rollback/re-read.
-- Nomor penerimaan unik, tanggal posting UTC dan tanggal dokumen WIB terpisah.
-- Riwayat penerimaan dan kartu stok dasar; seed demo penerimaan melalui service yang sama.
+**1. Kontrak dan validasi**
+
+- Pakai tabel `GoodsReceipt`, `Item`, dan `StockMovement` beserta constraint migrasi tahap 02. Tambahkan service `receiving` dan read service `inventory` dengan DTO allowlist. Identitas penerima dan pelaku mutasi berasal dari principal.
+- `POST /api/receipts` memakai `receipt:create`, guard HTTP tahap 04, dan header `Idempotency-Key` berupa UUID. Body menerima `itemId`, `quantity`, `receivedOn`, `sourceName`, `deliveryNoteRef`, dan `notes`. Tolak field tambahan dan jumlah yang bukan integer JSON antara 1 dan 1.000.000.
+- Validasi `receivedOn` sebagai tanggal kalender `YYYY-MM-DD` sampai hari ini di Asia/Jakarta. Form mengisi default tanggal WIB. Rapikan spasi di ujung teks dan normalkan field opsional kosong menjadi `null`. Batas usulan untuk asal barang, surat jalan, dan catatan adalah 120, 120, dan 500 karakter.
+- `GET /api/receipts` memakai `receipt:read`. `GET /api/movements` memakai `movement:read`. Petugas gudang dan superadmin dapat membaca keduanya. Pagination memakai default 20 dan maksimum 100, serta filter barang dan tanggal. Filter tanggal riwayat penerimaan memakai tanggal dokumen, sedangkan kartu stok memakai tanggal posting WIB.
+
+**2. Transaksi penerimaan**
+
+- Hitung SHA-256 dari enam field payload yang sudah dinormalisasi dalam urutan tetap. Cari receipt berdasarkan pasangan pelaku dan key. Key dan hash yang cocok menghasilkan `200` dengan receipt awal. Hash berbeda untuk key yang sama menghasilkan `409`. Barang yang dipilih harus ada dan saldo hasil penambahan maksimal 2.000.000.000.
+- Gunakan satu transaksi pendek `ReadCommitted`. Cek replay, ambil lock item `FOR UPDATE` dengan SQL terparameterisasi, lalu cek ulang replay dan baca saldo terkini. Buat receipt, tambah saldo, dan tulis satu `StockMovement` berarah `IN` yang merujuk receipt, barang, jumlah, pelaku dan `balanceAfter`. Commit penerimaan baru menghasilkan `201`.
+- Jika dua transaksi berlomba pada unique constraint `(received_by, idempotency_key)`, biarkan transaksi yang gagal rollback, lalu baca hasil yang sudah committed untuk menentukan replay atau konflik. Uji juga ketika payload memakai item berbeda. Buat nomor penerimaan unik di server. Nomor surat jalan boleh berulang.
+- Simpan `receivedOn` sebagai `DATE` dan waktu posting sebagai timestamp UTC yang diambil sesudah lock. Urutkan kartu stok berdasarkan ID sequence numerik di database dan serialisasikan ID sebagai string dalam DTO. Tanggal dokumen yang lebih lama tetap muncul pada posisi sesuai urutan posting.
+
+**3. UI dan seed**
+
+- Isi halaman `/penerimaan` dengan riwayat dan tautan ke form `/penerimaan/baru` khusus petugas. Gunakan pencarian katalog untuk memilih satu item, tampilkan satuan, dan pertahankan key yang sama untuk retry pengiriman payload yang sama. Tampilkan hasil simpan, konflik, validasi, sesi kedaluwarsa, dan waktu tunggu `429`.
+- Isi `/kartu-stok` dengan mutasi masuk, nomor referensi, tanggal dokumen, waktu posting WIB, jumlah, pelaku, dan saldo setelah mutasi. Pakai read service langsung dari Server Components dan pertahankan tampilan yang dapat dipakai di ponsel. Alur mutasi keluar dilengkapi pada tahap 08.
+- Perluas seed demo opt-in dengan barang stok nol dan satu penerimaan melalui service yang sama. Pakai key dan payload demo tetap supaya menjalankan ulang seed tidak menambah saldo atau mutasi lagi. Perbarui README dengan kontrak API, langkah demo, dan bukti tes.
 
 **Gate**
-- AC05–AC07, bagian AC15 dan AC22; retry paralel menambah stok sekali; surat jalan sama boleh pada beberapa record.
-- Backdate tidak merusak urutan balance_after; exception sesudah stock update membatalkan receipt dan ledger.
+
+- AC05–AC07. Uji HTTP untuk validasi jumlah dan tanggal, batas saldo, role dan origin, field saldo atau pelaku palsu, receipt baru `201`, replay `200`, konflik `409`, serta surat jalan sama pada penerimaan berbeda.
+- AC06. Gunakan request dan koneksi PostgreSQL independen untuk membuktikan bahwa retry paralel dengan key setara menghasilkan satu receipt, satu mutasi `IN`, dan satu penambahan saldo. Dua penerimaan valid dengan key berbeda pada item sama harus tercatat dua kali dengan saldo berurutan.
+- AC15. Picu kegagalan terkontrol saat insert mutasi di PostgreSQL tes setelah saldo diperbarui. Pastikan saldo, receipt, dan ledger kembali ke keadaan awal. Jalankan ulang seed demo dan verifikasi hanya ada satu dampak stok.
+- AC22. Posting penerimaan bertanggal dokumen lebih lama setelah penerimaan sebelumnya. Verifikasi urutan sequence, `balanceAfter`, dan rekonsiliasi saldo. Uji tampilan browser untuk penerimaan, kartu stok, dan akses baca superadmin. Jalankan lint, typecheck, unit, integration, e2e, serta production build sebelum menutup tahap. Serahkan perubahan unstaged.
 
 ## Tahap 07 — Permintaan karyawan
 
@@ -188,9 +208,9 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | 01 | DONE | `chore: bootstrap next warehouse application` | `npm ci --no-audit --no-fund`, `db:generate`, `auth:generate`, `prisma validate`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (2), `test:e2e` (1), dan `docker compose config --quiet` berhasil. | PostgreSQL 17.11 portabel digunakan pada database terpisah. Engine Docker lokal belum tersedia untuk menjalankan container Compose. |
 | 02 | DONE | `5a9cdc2` | `auth:generate`, `prisma validate`, `db:generate`, `db:migrate -- --create-only --name init_warehouse`, `db:migrate:deploy` dua kali, `prisma migrate status`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (37), dan `test:e2e` (1) berhasil. | Migrasi dan seed diuji pada PostgreSQL 17.11 portabel di database terpisah. Database aplikasi tetap utuh. Perubahan diserahkan unstaged. |
 | 03 | DONE | `df68190` | `db:migrate:deploy` di database tes, `lint`, `typecheck`, `next build --webpack`, `test:unit` (15), `test:integration` (46), `test:e2e` (1), dan smoke login HTTP development di loopback berhasil. | Tes HTTP memakai PostgreSQL 17.11 portabel dan upstream Next.js loopback. Webpack dipakai setelah error source map Turbopack di Windows. Perubahan diserahkan unstaged. |
-| 04 | DONE | — | `db:migrate:deploy` pada database tes, `lint`, `typecheck`, `build`, `test:unit` (32), `test:integration` (52), dan `test:e2e` (5) berhasil. | Playwright memakai Next development pada loopback. Tes RBAC bisnis memakai HTTP fixture dan PostgreSQL 17.11 portabel. Perubahan diserahkan unstaged. |
-| 05 | TODO | — | — | Belum dijalankan |
-| 06 | TODO | — | — | Belum dijalankan |
+| 04 | DONE | `209a78a` | `db:migrate:deploy` pada database tes, `lint`, `typecheck`, `build`, `test:unit` (32), `test:integration` (52), dan `test:e2e` (5) berhasil. | Playwright memakai Next development pada loopback. Tes RBAC bisnis memakai HTTP fixture dan PostgreSQL 17.11 portabel. Perubahan diserahkan unstaged. |
+| 05 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (50), `test:integration` (59), dan `test:e2e` (6) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright memakai Next development pada loopback. Perubahan diserahkan unstaged. |
+| 06 | TODO | — | Rencana implementasi dan pengujian tercatat pada tahap 06. | Implementasi belum dimulai. |
 | 07 | TODO | — | — | Belum dijalankan |
 | 08 | TODO | — | — | Belum dijalankan |
 | 09 | TODO | — | — | Belum dijalankan |
