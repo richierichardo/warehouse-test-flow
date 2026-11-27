@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–03 sudah diimplementasikan. Tahap 04–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–04 sudah diimplementasikan. Tahap 05–10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
@@ -51,7 +51,7 @@ Migrasi `20261126080120_init_warehouse` berisi model hasil generator Better Auth
 
 ## Tahap 03 — Auth, session, dan baseline HTTP security
 
-Status: DONE | Commit: menunggu review pemilik repo
+Status: DONE | Commit: `df68190`
 
 **Kerja**
 - Login/logout Better Auth, public signup disabled, login error generik, hook akun aktif.
@@ -72,7 +72,7 @@ Mode `direct` memakai bucket bersama. Mode `nginx` menggunakan header IP yang di
 
 ## Tahap 04 — RBAC, ownership, shell UI
 
-Status: TODO | Commit: `feat: enforce server rbac and role navigation`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **Kerja**
 - Permission map tiga role dan helper deny-by-default; ownership employee pada repository query.
@@ -84,6 +84,10 @@ Status: TODO | Commit: `feat: enforce server rbac and role navigation`
 **Gate**
 - Employee tidak bisa membuat barang/menerima/approve; warehouse tidak bisa mengubah akses akun; superadmin tidak bisa mengubah stok.
 - Payload actor/role/stock dari client ditolak; status 401/403/404 konsisten.
+
+Halaman login dan ruang kerja memakai auth tahap 03. Server memeriksa session serta izin setiap halaman sebelum menampilkan ruang kerja. Menu dan halaman modul menggunakan permission map yang sama. Modul yang dijadwalkan pada tahap berikutnya menampilkan status belum tersedia.
+
+Guard bisnis, scope pemilik permintaan, dan kuota per akun diuji melalui server HTTP fixture dengan session Better Auth dan PostgreSQL. Endpoint katalog, transaksi, dan administrasi tersedia pada tahap masing-masing. Konfigurasi Next development mempertahankan `AGENTS.md` yang dikelola repo.
 
 ## Tahap 05 — Katalog
 
@@ -183,8 +187,8 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | --- | --- | --- | --- | --- |
 | 01 | DONE | `chore: bootstrap next warehouse application` | `npm ci --no-audit --no-fund`, `db:generate`, `auth:generate`, `prisma validate`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (2), `test:e2e` (1), dan `docker compose config --quiet` berhasil. | PostgreSQL 17.11 portabel digunakan pada database terpisah. Engine Docker lokal belum tersedia untuk menjalankan container Compose. |
 | 02 | DONE | `5a9cdc2` | `auth:generate`, `prisma validate`, `db:generate`, `db:migrate -- --create-only --name init_warehouse`, `db:migrate:deploy` dua kali, `prisma migrate status`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (37), dan `test:e2e` (1) berhasil. | Migrasi dan seed diuji pada PostgreSQL 17.11 portabel di database terpisah. Database aplikasi tetap utuh. Perubahan diserahkan unstaged. |
-| 03 | DONE | — | `db:migrate:deploy` di database tes, `lint`, `typecheck`, `next build --webpack`, `test:unit` (15), `test:integration` (46), `test:e2e` (1), dan smoke login HTTP development di loopback berhasil. | Tes HTTP memakai PostgreSQL 17.11 portabel dan upstream Next.js loopback. Webpack dipakai setelah error source map Turbopack di Windows. Perubahan diserahkan unstaged. |
-| 04 | TODO | — | — | Belum dijalankan |
+| 03 | DONE | `df68190` | `db:migrate:deploy` di database tes, `lint`, `typecheck`, `next build --webpack`, `test:unit` (15), `test:integration` (46), `test:e2e` (1), dan smoke login HTTP development di loopback berhasil. | Tes HTTP memakai PostgreSQL 17.11 portabel dan upstream Next.js loopback. Webpack dipakai setelah error source map Turbopack di Windows. Perubahan diserahkan unstaged. |
+| 04 | DONE | — | `db:migrate:deploy` pada database tes, `lint`, `typecheck`, `build`, `test:unit` (32), `test:integration` (52), dan `test:e2e` (5) berhasil. | Playwright memakai Next development pada loopback. Tes RBAC bisnis memakai HTTP fixture dan PostgreSQL 17.11 portabel. Perubahan diserahkan unstaged. |
 | 05 | TODO | — | — | Belum dijalankan |
 | 06 | TODO | — | — | Belum dijalankan |
 | 07 | TODO | — | — | Belum dijalankan |

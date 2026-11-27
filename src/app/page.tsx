@@ -1,16 +1,14 @@
-import { Card } from "@/components/ui/card";
+import { WorkspaceShell } from "@/components/workspace-shell";
+import { requireWorkspacePrincipal } from "@/modules/identity-access/workspace";
 
-export default function Home() {
+export default async function Home() {
+  const principal = await requireWorkspacePrincipal();
   return (
-    <main className="mx-auto max-w-3xl px-5 py-14 sm:px-8 sm:py-24">
-      <Card className="space-y-4 p-7 sm:p-12">
-        <h1 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-5xl">
-          Gudang Perlengkapan Kantor
-        </h1>
-        <p className="max-w-md text-base leading-7 text-muted-foreground">
-          Fondasi aplikasi sudah tersedia. Katalog, penerimaan, dan permintaan barang akan ditambahkan bertahap.
-        </p>
-      </Card>
-    </main>
+    <WorkspaceShell principal={principal} path="/">
+      <section className="rounded-lg border bg-card p-7 sm:p-10">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Gudang Perlengkapan Kantor</h1>
+        <p className="mt-4 max-w-lg text-base leading-7 text-muted-foreground">Pilih menu untuk membuka area kerja yang tersedia untuk akun Anda.</p>
+      </section>
+    </WorkspaceShell>
   );
 }

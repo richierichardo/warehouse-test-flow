@@ -4,10 +4,12 @@ import { createHmac } from "node:crypto";
 import type { PrismaClient } from "../generated/prisma/client";
 
 const authLimits = { login: 10, auth: 120 };
+const businessLimits = { read: 120, write: 60, decision: 30, admin: 20 };
 type AuthBucket = keyof typeof authLimits;
+type BusinessBucket = keyof typeof businessLimits;
 
-export async function consumeAuthQuota(db: PrismaClient, secret: string, bucket: AuthBucket, ip: string | null) {
-  const keyHash = createHmac("sha256", secret).update(`${bucket}\0${ip ?? "shared"}`).digest("hex");
+async function consumeQuota(db: PrismaClient, secret: string, bucket: string, identity: string, limit: number) {
+  const keyHash = createHmac("sha256", secret).update(`${bucket}\0${identity}`).digest("hex");
   const [result] = await db.$queryRaw<Array<{ allowed: boolean; retryAfter: number }>>`
     WITH current_window AS (
       SELECT date_trunc('minute', statement_timestamp()) AS starts_at
@@ -17,7 +19,7 @@ export async function consumeAuthQuota(db: PrismaClient, secret: string, bucket:
       FROM current_window
       ON CONFLICT (key_hash, window_start) DO UPDATE
       SET count = rate_limit_bucket.count + 1
-      WHERE rate_limit_bucket.count < ${authLimits[bucket]}
+      WHERE rate_limit_bucket.count < ${limit}
       RETURNING 1
     )
     SELECT EXISTS(SELECT 1 FROM consumed) AS allowed,
@@ -27,4 +29,12 @@ export async function consumeAuthQuota(db: PrismaClient, secret: string, bucket:
 
   if (!result) throw new Error("PostgreSQL tidak mengembalikan hasil rate limit.");
   return result;
+}
+
+export function consumeAuthQuota(db: PrismaClient, secret: string, bucket: AuthBucket, ip: string | null) {
+  return consumeQuota(db, secret, bucket, ip ?? "shared", authLimits[bucket]);
+}
+
+export function consumeBusinessQuota(db: PrismaClient, secret: string, bucket: BusinessBucket, actorId: string) {
+  return consumeQuota(db, secret, bucket, actorId, businessLimits[bucket]);
 }

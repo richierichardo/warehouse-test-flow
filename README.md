@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan halaman awal, schema PostgreSQL, CLI seed, dan endpoint login, session, serta logout. Halaman login dan navigasi per role dijadwalkan pada tahap 04. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan halaman login, ruang kerja dengan navigasi sesuai role, schema PostgreSQL, dan CLI seed. Fitur operasional tersedia bertahap mulai dari katalog pada tahap 05. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -105,7 +105,7 @@ npm run db:migrate:deploy
 npm run dev
 ```
 
-Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. [Halaman awal lokal](http://localhost:3000)
+Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. Masuk dengan akun yang dibuat melalui seed. [Halaman login lokal](http://localhost:3000/login)
 
 `dev` dan `build` memakai Webpack karena build jalur auth memicu error source map Turbopack pada lingkungan Windows yang diuji.
 
@@ -119,7 +119,7 @@ Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `
 | `BETTER_AUTH_SECRET` | Secret acak kuat, minimal sesuai persyaratan library |
 | `BETTER_AUTH_URL` | Origin aplikasi, HTTPS pada production |
 | `APP_ORIGIN` | Satu origin sah untuk mutation; harus konsisten dengan URL auth |
-| `RATE_LIMIT_KEY_SECRET` | Secret HMAC untuk identitas limiter berbasis IP |
+| `RATE_LIMIT_KEY_SECRET` | Secret HMAC untuk limiter auth berbasis IP dan limiter bisnis berbasis akun |
 | `TRUSTED_PROXY_MODE` | `direct` lokal atau `nginx` pada deployment yang sesuai |
 | `TRUSTED_PROXY_SECRET` | Secret 64 digit hex yang dibagikan dengan Nginx dalam mode `nginx` |
 | `SEED_DEMO_ENABLED` | Set `true` untuk mengizinkan pembuatan akun demo |
@@ -143,7 +143,13 @@ Untuk menyiapkan akun demo lokal, set `SEED_DEMO_ENABLED=true` dan isi ketiga pa
 
 Request POST memerlukan `Origin` yang sama dengan `APP_ORIGIN`. Set `BETTER_AUTH_URL` ke origin yang sama. Gunakan `npm run dev` untuk HTTP loopback. Auth pada build produksi memerlukan origin HTTPS. Setiap session berlaku delapan jam sejak dibuat. Respons `429` menyertakan `Retry-After` dalam detik.
 
-## Pemeriksaan tahap 03
+### Ruang kerja dan izin
+
+Ruang kerja memeriksa session dan izin di server pada setiap halaman. Karyawan melihat menu Katalog dan Permintaan Saya. Petugas gudang melihat Katalog, Penerimaan, Permintaan, dan Kartu Stok. Superadmin mendapat area baca untuk operasi gudang serta menu Akun dan Audit. Halaman yang modulnya masih dijadwalkan menampilkan status belum tersedia.
+
+`withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL. Gunakan helper ini mulai dari endpoint katalog tahap 05. Repository permintaan menyediakan scope pemilik untuk daftar dan detail yang dipakai pada tahap 07.
+
+## Pemeriksaan tahap 04
 
 ```bash
 npm run lint
@@ -164,7 +170,9 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Jalankan `npm run build` sebelum tes integrasi. Tes memakai akun dan bucket sementara, serta menjalankan beberapa proses Next.js pada port loopback untuk memeriksa limiter bersama. Tes limiter menunggu window berikutnya hingga satu menit. Playwright menguji halaman awal pada port `3100`. Pembersihan bucket rate limit dijadwalkan pada tahap 09.
+Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes RBAC menggunakan server HTTP fixture dan PostgreSQL untuk memeriksa izin, filter kepemilikan, serta kuota bisnis.
+
+`npm run test:e2e` memakai `TEST_DATABASE_URL` yang sama dan menyalakan Next.js development pada `127.0.0.1:3100`. Playwright menyusun akun fixture sementara untuk menguji login, navigasi, logout, dan sesi kedaluwarsa di browser. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
 
 ### Proxy Nginx untuk produksi
 

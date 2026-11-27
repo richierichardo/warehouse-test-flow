@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { getAuthRuntime, invalidCredentials } from "./auth";
+import { HttpError, invalidBody, readJsonBody } from "./http";
 import { findActivePrincipal, principalSchema } from "./principal";
 import { consumeAuthQuota } from "./rate-limit";
 import { trustedClientIp, verifiedIpHeader } from "./trusted-ip";
@@ -9,7 +10,6 @@ import { trustedClientIp, verifiedIpHeader } from "./trusted-ip";
 const signInPath = "/api/auth/sign-in/email";
 const signOutPath = "/api/auth/sign-out";
 const sessionPath = "/api/auth/get-session";
-const maxBodyBytes = 32 * 1024;
 
 const signInSchema = z.strictObject({
   email: z.string().trim().pipe(z.email()),
@@ -22,68 +22,11 @@ const sessionResult = z.object({
   user: z.object({ id: z.string() }),
 }).nullable();
 
-class AuthRequestError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
-    super(message);
-  }
-}
-
 function json(body: unknown, status: number, cookieSource?: Response, extraHeaders?: HeadersInit) {
   const headers = new Headers(extraHeaders);
   headers.set("Cache-Control", "private, no-store");
   for (const cookie of cookieSource?.headers.getSetCookie() ?? []) headers.append("Set-Cookie", cookie);
   return Response.json(body, { status, headers });
-}
-
-function invalidBody() {
-  return new AuthRequestError(422, "VALIDATION_ERROR", "Isi permintaan tidak valid.");
-}
-
-function oversizedBody() {
-  return new AuthRequestError(413, "BODY_TOO_LARGE", "Ukuran permintaan melebihi 32 KiB.");
-}
-
-function unsupportedMediaType() {
-  return new AuthRequestError(415, "UNSUPPORTED_MEDIA_TYPE", "Gunakan Content-Type application/json.");
-}
-
-async function readJsonBody(request: Request, allowEmpty: boolean): Promise<unknown> {
-  if (Number(request.headers.get("content-length")) > maxBodyBytes) throw oversizedBody();
-  if (!request.body && allowEmpty) return {};
-
-  const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
-  const isJson = contentType === "application/json";
-  if (!isJson && !allowEmpty) throw unsupportedMediaType();
-  if (!request.body) throw invalidBody();
-
-  const reader = request.body.getReader();
-  const decoder = new TextDecoder("utf-8", { fatal: true });
-  let received = 0;
-  let body = "";
-  try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      received += chunk.value.byteLength;
-      if (received > maxBodyBytes) throw oversizedBody();
-      if (isJson) body += decoder.decode(chunk.value, { stream: true });
-    }
-    body += decoder.decode();
-  } catch (error) {
-    void reader.cancel().catch(() => undefined);
-    if (error instanceof AuthRequestError) throw error;
-    throw invalidBody();
-  } finally {
-    reader.releaseLock();
-  }
-
-  if (received === 0 && allowEmpty) return {};
-  if (!isJson) throw unsupportedMediaType();
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw invalidBody();
-  }
 }
 
 function authHeaders(source: Headers, ip: string | null) {
@@ -115,7 +58,7 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
   try {
     const { auth, db, env } = getAuthRuntime();
     if (method === "POST" && request.headers.get("origin") !== env.APP_ORIGIN) {
-      throw new AuthRequestError(403, "INVALID_ORIGIN", "Origin permintaan tidak diizinkan.");
+      throw new HttpError(403, "INVALID_ORIGIN", "Origin permintaan tidak diizinkan.");
     }
 
     const ip = trustedClientIp(request.headers, env);
@@ -167,7 +110,7 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
     const principal = current ? await findActivePrincipal(db, current.user.id) : null;
     return json(current && principal ? { session: current.session, user: principal } : null, 200, result);
   } catch (error) {
-    if (error instanceof AuthRequestError) return json({ code: error.code, message: error.message }, error.status);
+    if (error instanceof HttpError) return json({ code: error.code, message: error.message }, error.status);
 
     console.warn("[warehouse-auth] Layanan autentikasi tidak tersedia.");
     return json({ code: "AUTH_UNAVAILABLE", message: "Layanan autentikasi sementara tidak tersedia." }, 503);
