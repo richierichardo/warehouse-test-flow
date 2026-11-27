@@ -13,6 +13,8 @@ const password = randomBytes(24).toString("hex");
 const catalogCode = `BROWSER-A4-${randomBytes(4).toString("hex").toUpperCase()}`;
 const catalogName = `Kertas A4 ${catalogCode}`;
 const fixtureRequestNo = `FIXTURE-${randomUUID()}`;
+const approvalFixtureNo = `FIXTURE-${randomUUID()}`;
+const rejectionFixtureNo = `FIXTURE-${randomUUID()}`;
 let db: PrismaClient;
 
 test.beforeAll(async () => {
@@ -26,6 +28,13 @@ test.beforeAll(async () => {
   await receiveFixtureStock(db, item.id, users[1].id, 1_250);
   await db.itemRequest.create({ data: { itemId: item.id, requesterId: users[0].id, quantity: 1,
     requestNo: fixtureRequestNo, idempotencyKey: randomUUID(), payloadHash: "fixture" } });
+  const decisionItem = await db.item.create({ data: {
+    code: `BROWSER-DECISION-${randomBytes(4).toString("hex").toUpperCase()}`, name: "Map keputusan browser", unit: "BOX", location: "Rak 2", createdById: users[1].id,
+  } });
+  await receiveFixtureStock(db, decisionItem.id, users[1].id, 10);
+  await db.itemRequest.createMany({ data: [approvalFixtureNo, rejectionFixtureNo].map((requestNo) => ({
+    itemId: decisionItem.id, requesterId: users[0].id, quantity: 3, requestNo, idempotencyKey: randomUUID(), payloadHash: "fixture",
+  })) });
 });
 
 test.afterAll(async () => {
@@ -35,7 +44,7 @@ test.afterAll(async () => {
     await db.user.deleteMany({ where: { id: { in: users.map(({ id }) => id) } } });
     const secret = process.env.WAREHOUSE_E2E_RATE_SECRET;
     if (secret) {
-      const identities = ["login\0shared", "auth\0shared", ...users.flatMap(({ id }) => [`read\0${id}`, `write\0${id}`])];
+      const identities = ["login\0shared", "auth\0shared", ...users.flatMap(({ id }) => [`read\0${id}`, `write\0${id}`, `decision\0${id}`])];
       const keys = identities.map((identity) => createHmac("sha256", secret).update(identity).digest("hex"));
       await db.rateLimitBucket.deleteMany({ where: { keyHash: { in: keys } } });
     }
@@ -68,9 +77,50 @@ async function searchCatalog(page: Page, query: string) {
   await expect(page).toHaveURL(/\/katalog\?q=/);
 }
 
+async function checkDecisions(page: Page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/permintaan");
+  await page.getByRole("link", { name: approvalFixtureNo }).click();
+  await page.getByRole("button", { name: "Setujui", exact: true }).click();
+  const approval = page.getByRole("dialog", { name: "Setujui permintaan" });
+  await expect(approval.getByText("Map keputusan browser · 3 BOX")).toBeVisible();
+  const [approved] = await Promise.all([
+    page.waitForResponse((result) => /\/api\/requests\/[^/]+\/approve$/.test(new URL(result.url()).pathname) && result.request().method() === "POST", { timeout: 35_000 }),
+    approval.getByRole("button", { name: "Konfirmasi persetujuan" }).click(),
+  ]);
+  expect(approved.status()).toBe(200);
+  await expect(page.getByText("Disetujui", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Setujui", exact: true })).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Kembali ke permintaan" }).click();
+  await page.getByRole("link", { name: rejectionFixtureNo }).click();
+  await page.getByRole("button", { name: "Tolak", exact: true }).click();
+  const rejection = page.getByRole("dialog", { name: "Tolak permintaan" });
+  await rejection.getByLabel("Alasan penolakan").fill("Barang sudah tersedia di unit.");
+  const [rejected] = await Promise.all([
+    page.waitForResponse((result) => /\/api\/requests\/[^/]+\/reject$/.test(new URL(result.url()).pathname) && result.request().method() === "POST", { timeout: 35_000 }),
+    rejection.getByRole("button", { name: "Konfirmasi penolakan" }).click(),
+  ]);
+  expect(rejected.status()).toBe(200);
+  await expect(page.getByText("Ditolak", { exact: true })).toBeVisible();
+  await expect(page.getByText("Barang sudah tersedia di unit.", { exact: true })).toBeVisible();
+
+  await page.getByRole("link", { name: "Kartu Stok", exact: true }).click();
+  const direction = page.getByRole("combobox", { name: "Arah mutasi" });
+  await expect(direction).toBeVisible();
+  await direction.selectOption("OUT");
+  await page.getByRole("button", { name: "Terapkan filter" }).click();
+  await expect(page).toHaveURL(/\/kartu-stok\?.*direction=OUT/);
+  const movement = page.getByRole("listitem").filter({ hasText: approvalFixtureNo });
+  await expect(movement.getByText("−3 BOX", { exact: true })).toBeVisible();
+  await expect(movement.getByText("7 BOX", { exact: true })).toBeVisible();
+  await expect(page.getByText("Jumlah masuk", { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+}
+
 for (const user of users) {
   test(`${user.role} masuk dan melihat navigasi sesuai izin`, async ({ page }) => {
-    test.setTimeout(105_000);
+    test.setTimeout(user.role === "WAREHOUSE" ? 155_000 : 105_000);
     if (user.role === "EMPLOYEE") await page.setViewportSize({ width: 390, height: 844 });
     await login(page, user.email);
     const nav = page.getByRole("navigation", { name: "Navigasi ruang kerja" });
@@ -105,6 +155,11 @@ for (const user of users) {
       await page.getByRole("link", { name: fixtureRequestNo }).click();
       await expect(page.getByRole("heading", { name: fixtureRequestNo })).toBeVisible();
       await expect(page.getByText(users[0].name, { exact: true })).toBeVisible();
+      if (user.role === "WAREHOUSE") await checkDecisions(page);
+      else {
+        await expect(page.getByRole("button", { name: "Setujui", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "Tolak", exact: true })).toHaveCount(0);
+      }
       await page.goto("/permintaan/baru");
       await expect(page).toHaveURL("/akses-ditolak");
     }
@@ -286,6 +341,8 @@ test("karyawan mengajukan barang melebihi stok dan melihat permintaan setelah lo
   await expect(page.getByRole("heading", { name: requestNo })).toBeVisible();
   await expect(page.getByText("Menunggu", { exact: true })).toBeVisible();
   await expect(page.getByText("Perlengkapan rapat browser", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Setujui", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Tolak", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
   await page.getByRole("button", { name: "Keluar" }).click();

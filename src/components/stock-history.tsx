@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { dateOnly } from "@/lib/warehouse-date";
-import type { HistoryQuery } from "@/modules/inventory/history-query";
+import { movementDirectionLabels, type HistoryQuery, type MovementQuery } from "@/modules/inventory/history-query";
 import { CatalogItemPicker } from "./catalog-item-picker";
 import { inputClass, primaryClass, secondaryClass } from "./operations-styles";
 
@@ -17,11 +17,14 @@ export function PostingDate({ value }: { value: string }) {
   return <time dateTime={value}>{postingDate.format(new Date(value))} WIB</time>;
 }
 
-function historyHref(path: string, query: HistoryQuery, page: number) {
+type StockHistoryQuery = HistoryQuery & { direction?: MovementQuery["direction"] };
+
+function historyHref(path: string, query: StockHistoryQuery, page: number) {
   const params = new URLSearchParams();
   if (query.itemId) params.set("itemId", query.itemId);
   if (query.from) params.set("from", query.from);
   if (query.to) params.set("to", query.to);
+  if (query.direction) params.set("direction", query.direction);
   if (query.limit !== 20) params.set("limit", String(query.limit));
   if (page > 1) params.set("page", String(page));
   return params.size ? `${path}?${params}` : path;
@@ -32,15 +35,16 @@ type HistoryProps = {
   title: string;
   rangeLabel: string;
   canReceive?: boolean;
+  movementFilter?: boolean;
   listing: {
-    query: HistoryQuery;
+    query: StockHistoryQuery;
     meta: { total: number; totalPages: number };
     item?: { id: string; code: string; name: string; unit: string };
     entries: ReactNode[];
   } | null;
 };
 
-export function StockHistory({ path, title, rangeLabel, canReceive, listing }: HistoryProps) {
+export function StockHistory({ path, title, rangeLabel, canReceive, movementFilter, listing }: HistoryProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -58,10 +62,17 @@ export function StockHistory({ path, title, rangeLabel, canReceive, listing }: H
             <span>{rangeLabel} sampai</span>
             <input name="to" type="date" className={inputClass} defaultValue={listing.query.to} />
           </label>
+          {movementFilter && <div className="space-y-2">
+            <label htmlFor="movement-direction" className="block text-sm font-medium">Arah mutasi</label>
+            <select id="movement-direction" className={inputClass} name="direction" defaultValue={listing.query.direction ?? ""}>
+              <option value="">Semua arah</option>
+              {Object.entries(movementDirectionLabels).map(([direction, label]) => <option key={direction} value={direction}>{label}</option>)}
+            </select>
+          </div>}
           {listing.query.limit !== 20 && <input type="hidden" name="limit" value={listing.query.limit} />}
           <div className="flex flex-wrap gap-2">
             <button className={primaryClass} type="submit">Terapkan filter</button>
-            {(listing.query.itemId || listing.query.from || listing.query.to || listing.query.page > 1 || listing.query.limit !== 20) && (
+            {(listing.query.itemId || listing.query.from || listing.query.to || listing.query.direction || listing.query.page > 1 || listing.query.limit !== 20) && (
               <Link className={secondaryClass} href={path} prefetch={false}>Reset</Link>
             )}
           </div>

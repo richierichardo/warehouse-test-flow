@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan login, katalog barang, penerimaan, kartu stok masuk dan pengajuan karyawan, dengan navigasi sesuai role. Petugas gudang mengelola metadata barang dan mencatat penerimaan. Petugas dan superadmin dapat membaca antrean permintaan. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan login, katalog barang, penerimaan, pengajuan karyawan, keputusan petugas, dan kartu stok masuk dan keluar. Petugas gudang mengelola permintaan. Superadmin dapat membaca antrean permintaan dan kartu stok. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -80,7 +80,7 @@ Permintaan dan penerimaan yang berhasil dibuat tidak diedit/dihapus melalui MVP.
 | `src/app/api/auth/[...all]/route.ts` | Handler Better Auth dengan guard transport |
 | `src/app/api/items/` | Endpoint katalog |
 | `src/app/api/receipts/` | Endpoint penerimaan |
-| `src/app/api/requests/` | Daftar, detail, dan pembuatan permintaan |
+| `src/app/api/requests/` | Daftar, detail, pembuatan permintaan, persetujuan dan penolakan |
 | `src/app/api/admin/users/` | Endpoint akses akun |
 | `src/modules/<domain>/` | Service, repository, schema, DTO per domain |
 | `src/lib/auth.ts` | Konfigurasi Better Auth server-only |
@@ -161,31 +161,35 @@ Semua role bisa membuka `/katalog` untuk mencari berdasarkan kode atau nama, men
 
 Kode dinormalisasi ke huruf kapital. Batas panjang untuk kode, nama, satuan, dan lokasi masing-masing 64, 160, 32, dan 120 karakter setelah dirapikan. Metadata pagination berada pada `meta` dengan field `page`, `limit`, `total`, dan `totalPages`.
 
-### Penerimaan dan kartu stok masuk
+### Penerimaan dan kartu stok
 
-Petugas membuka **Penerimaan → Catat penerimaan**, memilih satu barang dari hasil pencarian, lalu mengisi jumlah, tanggal dokumen, dan asal barang. Nomor surat jalan dan catatan opsional. Selesai simpan, petugas dapat membuka riwayat penerimaan atau kartu stok untuk melihat saldo setelah mutasi dalam satuan barang. Superadmin dapat membuka kedua riwayat. Mutasi keluar dijadwalkan pada tahap 08.
+Petugas membuka **Penerimaan → Catat penerimaan**, memilih satu barang dari hasil pencarian, lalu mengisi jumlah, tanggal dokumen, dan asal barang. Nomor surat jalan dan catatan opsional. Petugas dan superadmin dapat membuka riwayat penerimaan atau kartu stok. Kartu stok mencatat mutasi masuk dengan nomor penerimaan dan mutasi keluar dengan nomor permintaan.
 
 | Endpoint | Kontrak |
 | --- | --- |
 | `POST /api/receipts` | Petugas mengirim `itemId`, `quantity`, `receivedOn`, `sourceName`, `deliveryNoteRef` opsional dan `notes` opsional. Header `Idempotency-Key` wajib UUID. Penerimaan baru `201`, replay payload yang sama `200`, konflik key `409`. |
 | `GET /api/receipts` | Riwayat untuk petugas dan superadmin. Filter `itemId`, `from`, `to`, `page`, `limit`. Rentang tanggal dokumen inklusif dan hasil diurutkan dari waktu posting terbaru. |
-| `GET /api/movements` | Kartu stok masuk untuk petugas dan superadmin. Filter yang sama memakai tanggal posting WIB. Hasil diurutkan menurut ID posting terbaru. ID mutasi dikirim sebagai string. |
+| `GET /api/movements` | Kartu stok untuk petugas dan superadmin. Filter `itemId`, `from`, `to`, `page`, `limit` dan `direction` (`IN` atau `OUT`). Default menampilkan kedua arah. Tanggal memakai waktu posting WIB. ID posting dikirim sebagai string dan hasil diurutkan dari ID terbaru. |
 
 Jumlah berupa integer JSON antara 1 dan 1.000.000. Saldo maksimal 2.000.000.000. Tanggal dokumen memakai `YYYY-MM-DD` dan boleh lebih awal dari hari posting. Server merapikan teks dan memakai `null` untuk field opsional kosong sebelum menghitung hash dari enam field payload dalam urutan tetap. Form mempertahankan key saat mengulang pengiriman dengan isian yang sama. Pendataan tanggal mundur tetap mengikuti urutan posting kartu stok.
 
 ### Permintaan karyawan
 
-Karyawan membuka **Permintaan Saya → Buat permintaan** dan memilih barang dari katalog. Jumlah yang melebihi stok terakhir tetap bisa diajukan. Pengajuan tersimpan dengan status **Menunggu** dan saldo tetap tersedia untuk persetujuan pada tahap 08. Petugas gudang dan superadmin dapat membuka daftar dan detail seluruh permintaan.
+Karyawan membuka **Permintaan Saya → Buat permintaan** dan memilih barang dari katalog. Jumlah yang melebihi stok terakhir tetap bisa diajukan. Pengajuan tersimpan dengan status **Menunggu**. Petugas gudang dan superadmin dapat membuka daftar dan detail seluruh permintaan.
 
 | Endpoint | Kontrak |
 | --- | --- |
 | `POST /api/requests` | Khusus karyawan. Kirim `itemId`, `quantity` sebagai integer 1–1.000.000, dan `notes` opsional maksimal 500 karakter. Header `Idempotency-Key` wajib UUID. Sukses baru `201`, pengulangan payload setara `200`, konflik key `409`. |
 | `GET /api/requests` | Scope sesuai role. Filter `status` dengan nilai `PENDING`, `APPROVED`, atau `REJECTED`, serta `page` dan `limit`. Default 20 dan maksimum 100 hasil per halaman. Permintaan terbaru ditampilkan lebih dahulu. |
 | `GET /api/requests/:id` | Detail termasuk catatan dan informasi keputusan yang tersedia. ID yang tidak ditemukan atau berada di luar scope pemohon menghasilkan `404`. |
+| `POST /api/requests/:id/approve` | Khusus petugas. Kirim objek JSON `{}`. Persetujuan menyimpan keputusan dan satu mutasi `OUT`. Stok kurang menghasilkan `409 INSUFFICIENT_STOCK`. |
+| `POST /api/requests/:id/reject` | Khusus petugas. Kirim `reason` sepanjang 1–500 karakter setelah dirapikan. Penolakan menyimpan keputusan dan alasan. |
 
 Satu key berlaku per pemohon. UUID barang, jumlah, dan catatan yang sudah dirapikan menjadi isi hash payload. Form mempertahankan key ketika pengiriman dengan isian yang sama diulang dari form tersebut. Catatan permintaan tersedia di detail.
 
-## Pemeriksaan tahap 07
+Petugas membuka detail permintaan berstatus **Menunggu**, lalu memilih **Setujui** atau **Tolak** dan mengonfirmasi keputusan. Server mengambil pelaku dari sesi dan memeriksa stok terkini saat persetujuan. Persetujuan ulang dan penolakan ulang dengan alasan yang sama mengembalikan keputusan awal dengan `200`. Aksi berlawanan atau penggantian alasan atas keputusan terminal menghasilkan `409 ALREADY_DECIDED`.
+
+## Pemeriksaan tahap 08
 
 ```bash
 npm run lint
@@ -206,9 +210,9 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog, penerimaan dan permintaan memakai Route Handler produksi dan PostgreSQL. Tes penerimaan serta permintaan memakai transaksi independen untuk memeriksa retry paralel dan konflik key. Tes penerimaan juga menyuntikkan kegagalan insert ledger untuk membuktikan rollback. Tes permintaan memeriksa isolasi daftar, jumlah hasil, dan detail antarpegawai.
+Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js dan dapat menunggu window limiter berikutnya hingga satu menit. Tes transaksi memakai Route Handler produksi dan PostgreSQL dengan koneksi independen. Skenario meliputi pengiriman ulang, dua approval yang bersaing, approve-vs-reject, penerimaan paralel, kegagalan insert ledger, dan rekonsiliasi saldo menurut urutan posting.
 
-`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memeriksa auth, katalog, penerimaan, kartu stok, pengajuan di ponsel, dan akses riwayat sesudah login ulang. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
+`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memeriksa keputusan petugas di ponsel, alasan penolakan, filter arah kartu stok, akses riwayat sesudah login ulang, dan alur tahap sebelumnya. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
 
 ### Proxy Nginx untuk produksi
 

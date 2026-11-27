@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–07 sudah diimplementasikan. Tahap 08–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–08 sudah diimplementasikan. Tahap 09–10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
@@ -142,7 +142,7 @@ Tes HTTP produksi membuktikan retry dengan satu key, dua penerimaan sah dengan k
 
 ## Tahap 07 — Permintaan karyawan
 
-Status: DONE | Commit: menunggu review pemilik repo
+Status: DONE | Commit: `dd74d7d`
 
 **Kerja**
 - Form satu barang + qty, idempotency key, nomor request, status PENDING.
@@ -160,7 +160,7 @@ Tes HTTP membuktikan bahwa dua koneksi PostgreSQL yang bersaing dengan key sama 
 
 ## Tahap 08 — Approval, rejection, dan concurrency gate
 
-Status: TODO | Commit: `feat: implement atomic stock decisions with concurrency guards`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **Kerja**
 - Approval lock request lalu item, cek state+stok terbaru, update saldo, satu OUT dan decision dalam satu transaksi.
@@ -173,6 +173,10 @@ Status: TODO | Commit: `feat: implement atomic stock decisions with concurrency 
 - AC10–AC16 dan AC22 memakai PostgreSQL nyata serta koneksi independen.
 - Stok 10 dua request 7: satu approved, saldo 3; approve request sama: satu OUT; approve vs reject: satu terminal state.
 - Inject failure membuktikan rollback; penerimaan bersamaan approval tidak merusak ledger.
+
+Endpoint keputusan memakai izin `request:decide` dan kuota `write` serta `decision`. Persetujuan mengambil lock permintaan lalu lock barang yang juga dipakai penerimaan. Replay mengembalikan metadata keputusan awal. Kartu stok menampilkan kedua arah dan mendukung filter arah serta rentang tanggal posting WIB.
+
+Tes HTTP dengan koneksi PostgreSQL independen mengamati kedua transaksi menunggu lock sebelum memeriksa keputusan, jumlah mutasi, dan saldo. Tes menyuntikkan kegagalan insert `OUT` setelah pengurangan stok. Penerimaan bertanggal mundur yang berjalan bersama approval menghasilkan saldo yang cocok dengan total `IN` dikurangi `OUT` dan urutan `balanceAfter`. Browser memverifikasi dialog persetujuan, penolakan dengan alasan, dan filter arah mutasi pada lebar 390 piksel.
 
 ## Tahap 09 — Superadmin terbatas dan verifikasi security menyeluruh
 
@@ -217,7 +221,7 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | 04 | DONE | `209a78a` | `db:migrate:deploy` pada database tes, `lint`, `typecheck`, `build`, `test:unit` (32), `test:integration` (52), dan `test:e2e` (5) berhasil. | Playwright memakai Next development pada loopback. Tes RBAC bisnis memakai HTTP fixture dan PostgreSQL 17.11 portabel. Perubahan diserahkan unstaged. |
 | 05 | DONE | `52bce21` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (50), `test:integration` (59), dan `test:e2e` (6) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright memakai Next development pada loopback. Perubahan diserahkan unstaged. |
 | 06 | DONE | `f2b9d82` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (69), `test:integration` (67), dan `test:e2e` (8) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Browser mencatat satu peringatan deprecation dari driver `pg` tentang query yang masih berjalan. Seluruh tes lulus dan perubahan diserahkan unstaged. |
-| 07 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (84), `test:integration` (73), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Regresi browser penerimaan kembali mencatat peringatan deprecation driver `pg`. Perubahan diserahkan unstaged. |
-| 08 | TODO | — | — | Belum dijalankan |
+| 07 | DONE | `dd74d7d` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (84), `test:integration` (73), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Regresi browser penerimaan kembali mencatat peringatan deprecation driver `pg`. Perubahan diserahkan unstaged. |
+| 08 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (95), `test:integration` (81), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright kembali mencatat peringatan deprecation driver `pg` tentang query yang masih berjalan. Perubahan diserahkan unstaged. |
 | 09 | TODO | — | — | Belum dijalankan |
 | 10 | TODO | — | — | Belum dijalankan |

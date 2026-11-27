@@ -1,12 +1,11 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import { hashPassword } from "better-auth/crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import type { Prisma } from "../../src/generated/prisma/client";
 import { createDb } from "../../src/lib/db";
 import { deleteCatalogFixtures } from "../catalog-fixture";
 import { testDatabaseUrl } from "./database";
 import { startNextTestApp } from "./next-app";
+import { blockedQueries, holdLock } from "./pg-lock";
 
 vi.mock("server-only", () => ({}));
 
@@ -156,39 +155,14 @@ it("mengembalikan receipt awal untuk payload setara dan menerima surat jalan ber
   ]]);
 });
 
-async function holdLock(lock: (tx: Prisma.TransactionClient) => Promise<unknown>) {
-  const held = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  const blocker = db.$transaction(async (tx) => {
-    await lock(tx);
-    held.resolve();
-    await release.promise;
-  }, { timeout: 12_000 });
-  void blocker.catch(held.reject);
-  await held.promise;
-  return async () => { release.resolve(); await blocker; };
-}
-
-async function blockedQueries(pattern: string, count: number) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const [row] = await db.$queryRaw<Array<{ count: number }>>`
-      SELECT count(*)::int AS count FROM pg_stat_activity
-      WHERE datname = current_database() AND query LIKE ${pattern} AND cardinality(pg_blocking_pids(pid)) > 0
-    `;
-    if (row.count >= count) return true;
-    await delay(65);
-  }
-  return false;
-}
-
 it.each([true, false])("menyerialkan dua penerimaan pada item sama (key sama: %s)", async (sameKey) => {
   const { id } = await createItem();
-  const release = await holdLock((tx) => tx.$queryRaw`SELECT id FROM item WHERE id = ${id}::uuid FOR UPDATE`);
+  const release = await holdLock(db, (tx) => tx.$queryRaw`SELECT id FROM item WHERE id = ${id}::uuid FOR UPDATE`);
   const key = randomUUID();
   const pair = Promise.all([receive(payload(id), key), receive(payload(id), sameKey ? key : randomUUID())]);
   let simultaneous: boolean;
   try {
-    simultaneous = await blockedQueries("%SELECT stock FROM item WHERE id%", 2);
+    simultaneous = await blockedQueries(db, "%SELECT stock FROM item WHERE id%", 2);
   } finally {
     await release();
   }
@@ -229,15 +203,15 @@ it("menangani race unique key ketika dua payload mengunci item berbeda", async (
   const second = await createItem();
   const key = randomUUID();
   await withTestMovementTrigger(async () => {
-    const release = await holdLock((tx) => tx.$executeRaw`SELECT pg_advisory_xact_lock(606061)`);
+    const release = await holdLock(db, (tx) => tx.$executeRaw`SELECT pg_advisory_xact_lock(606061)`);
     const winner = receive(payload(first.id, 400001), key);
     let contender: Promise<Response> | undefined;
     let ledgerWait = false;
     let keyWait = false;
     try {
-      ledgerWait = await blockedQueries("%INSERT INTO%stock_movement%", 1);
+      ledgerWait = await blockedQueries(db, "%INSERT INTO%stock_movement%", 1);
       contender = receive(payload(second.id), key);
-      keyWait = await blockedQueries("%INSERT INTO%goods_receipt%", 1);
+      keyWait = await blockedQueries(db, "%INSERT INTO%goods_receipt%", 1);
     } finally {
       await release();
     }

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { secondaryClass } from "@/components/operations-styles";
+import { RequestDecisionActions } from "@/components/request-decision-actions";
 import { RequestStatusLabel } from "@/components/request-status";
 import { PostingDate, warehouseNumber } from "@/components/stock-history";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthRuntime } from "@/lib/auth";
-import { hasAnyPermission } from "@/lib/permissions";
+import { hasAnyPermission, hasPermission } from "@/lib/permissions";
 import { requireWorkspacePrincipal } from "@/modules/identity-access/workspace";
 import { requestUuidSchema } from "@/modules/requisitions/schema";
 import { getRequest } from "@/modules/requisitions/service";
@@ -38,6 +39,9 @@ export default async function RequestDetailsPage({ params }: { params: Promise<{
             {entry.rejectionReason && <div className="sm:col-span-2"><dt className="text-muted-foreground">Alasan ditolak</dt><dd className="wrap-anywhere whitespace-pre-wrap">{entry.rejectionReason}</dd></div>}
           </dl>
         </section>
+        {hasPermission(principal.role, "request:decide") && (
+          <RequestDecisionActions id={entry.id} status={entry.status} item={entry.item} quantity={entry.quantity} />
+        )}
         <Link href="/permintaan" prefetch={false} className={secondaryClass}>Kembali ke permintaan</Link>
       </div>
     </WorkspaceShell>

@@ -2,11 +2,19 @@ import { z } from "zod";
 
 export const maxRequestQuantity = 1_000_000;
 export const maxRequestNotes = 500;
+export const maxRejectionReason = 500;
 export const requestStatuses = ["PENDING", "APPROVED", "REJECTED"] as const;
 export type RequestStatus = (typeof requestStatuses)[number];
 
 export const requestStatusLabels = { PENDING: "Menunggu", APPROVED: "Disetujui", REJECTED: "Ditolak" } satisfies Record<RequestStatus, string>;
 export const requestUuidSchema = z.uuid().transform((uuid) => uuid.toLowerCase());
+
+export const approveRequestSchema = z.strictObject({});
+export const rejectRequestSchema = z.strictObject({
+  reason: z.string().trim().min(1).max(maxRejectionReason).refine((reason) => !reason.includes("\0")),
+});
+
+export type RequestDecision = { status: "APPROVED" } | { status: "REJECTED"; reason: string };
 
 export const createRequestSchema = z.strictObject({
   itemId: requestUuidSchema,

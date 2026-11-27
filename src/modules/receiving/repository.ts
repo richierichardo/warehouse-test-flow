@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "../../generated/prisma/client.ts";
 import { dateOnly } from "../../lib/warehouse-date.ts";
+import { lockItemStock, postingTime } from "../inventory/stock-lock.ts";
 import type { ReceiptInput } from "./schema.ts";
 
 export const receiptFields = {
@@ -34,9 +35,7 @@ export function postReceipt(db: PrismaClient, { actorId, key, hash, input }: Rec
     const previous = await findReceiptByKey(tx, actorId, key);
     if (previous) return { kind: "recorded", record: previous } as const;
 
-    const [item] = await tx.$queryRaw<Array<{ stock: number }>>`
-      SELECT stock FROM item WHERE id = ${input.itemId}::uuid FOR UPDATE
-    `;
+    const item = await lockItemStock(tx, input.itemId);
     // A request for this item may have committed while this transaction was waiting for the lock.
     const committed = await findReceiptByKey(tx, actorId, key);
     if (committed) return { kind: "recorded", record: committed } as const;
@@ -45,7 +44,7 @@ export function postReceipt(db: PrismaClient, { actorId, key, hash, input }: Rec
     const balanceAfter = item.stock + input.quantity;
     if (balanceAfter > 2_000_000_000) return { kind: "stock-limit" } as const;
 
-    const [{ postedAt }] = await tx.$queryRaw<Array<{ postedAt: Date }>>`SELECT clock_timestamp() AS "postedAt"`;
+    const postedAt = await postingTime(tx);
     const { itemId, quantity, receivedOn, sourceName, deliveryNoteRef, notes } = input;
     const record = await tx.goodsReceipt.create({ data: {
       receiptNo: `RCV-${randomUUID().toUpperCase()}`, itemId, quantity, receivedOn: dateOnly(receivedOn),
