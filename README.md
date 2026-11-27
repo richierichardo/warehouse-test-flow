@@ -2,14 +2,14 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Tahap 01 menyediakan fondasi aplikasi dan halaman awal. Schema bisnis, migrasi, dan akun awal dijadwalkan pada tahap 02. Login dan logout dijadwalkan pada tahap 03. Lihat [log eksekusi](PLAN.md#log-eksekusi) untuk hasil verifikasi.
+Proyek menyediakan halaman awal, schema PostgreSQL, migrasi awal, dan CLI untuk membuat akun demo. Login dan logout dijadwalkan pada tahap 03. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
 | File | Kegunaan |
 | --- | --- |
 | [PRD.md](PRD.md) | Scope, alur bisnis, data, API, akses, keamanan, acceptance criteria |
-| [PLAN.md](PLAN.md) | Sepuluh tahap implementasi, satu tahap menjadi satu commit utama |
+| [PLAN.md](PLAN.md) | Sepuluh tahap implementasi dan log verifikasi |
 | [AGENTS.md](AGENTS.md) | Aturan bagi agent yang mengimplementasikan repository |
 
 Deadline pengumpulan **28 November 2026, pukul 23.59 WIB**. Pengumpulan berupa source ZIP melalui Google Drive, disertai URL dan akun akses jika deployed, atau video demo. [PDF soal](PAPI%20-%20Tes%2026112026.pdf)
@@ -93,38 +93,44 @@ Permintaan dan penerimaan yang berhasil dibuat tidak diedit/dihapus melalui MVP.
 
 Server Components membaca data melalui service/DAL langsung; tidak memanggil HTTP API internal sendiri. Mutation dari browser memakai Route Handlers. Jangan menambahkan Server Action yang menduplikasi mutation tanpa guard yang sama.
 
-## Setup lokal tahap 01
+## Setup lokal
 
 Gunakan Node.js dan npm yang tercatat di atas. Jalankan perintah berikut dari root proyek via PowerShell.
 
 ```powershell
 npm ci
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+docker compose up -d --wait db
+npm run db:migrate:deploy
 npm run dev
 ```
 
-Buka [halaman awal lokal](http://localhost:3000). Untuk menyalakan PostgreSQL 17, gunakan `docker compose up -d --wait db` saat Docker aktif atau arahkan `DATABASE_URL` ke PostgreSQL 17 lokal. Compose menerbitkan port `5433` di `127.0.0.1` dan menyimpan data dalam volume `postgres_data`.
+Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. [Halaman awal lokal](http://localhost:3000)
 
 Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `node -p "require('node:crypto').randomBytes(32).toString('hex')"` dua kali. Simpan satu hasil ke `BETTER_AUTH_SECRET` dan satu lagi ke `RATE_LIMIT_KEY_SECRET`. Jika mengubah password atau port Compose, sesuaikan `DATABASE_URL`.
 
 | Environment variable | Tujuan |
 | --- | --- |
 | `DATABASE_URL` | Koneksi PostgreSQL server-only |
-| `TEST_DATABASE_URL` | Koneksi PostgreSQL 17 yang terpisah untuk smoke test |
+| `TEST_DATABASE_URL` | Koneksi PostgreSQL 17 khusus tes dengan nama `warehouse_test` atau `warehouse_test_<suffix>` |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT` | Pengaturan Compose lokal |
 | `BETTER_AUTH_SECRET` | Secret acak kuat, minimal sesuai persyaratan library |
 | `BETTER_AUTH_URL` | Origin aplikasi, HTTPS pada production |
 | `APP_ORIGIN` | Satu origin sah untuk mutation; harus konsisten dengan URL auth |
 | `RATE_LIMIT_KEY_SECRET` | Secret HMAC untuk identitas limiter berbasis IP |
 | `TRUSTED_PROXY_MODE` | `direct` lokal atau `nginx` pada deployment yang sesuai |
-| `SEED_DEMO_ENABLED` | Opt-in eksplisit untuk seed data demo |
+| `SEED_DEMO_ENABLED` | Set `true` untuk mengizinkan pembuatan akun demo |
 | `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD` | Akun demo karyawan |
 | `SEED_WAREHOUSE_EMAIL`, `SEED_WAREHOUSE_PASSWORD` | Akun demo gudang |
 | `SEED_SUPERADMIN_EMAIL`, `SEED_SUPERADMIN_PASSWORD` | Akun demo administrator |
 
-Jangan memakai prefix `NEXT_PUBLIC_` untuk secret/database. Seed harus idempotent, memakai hashing library auth, dan tidak mengatur ulang password/role akun yang sudah ada secara diam-diam. Reset database harus berupa perintah terpisah yang jelas destructive.
+### Migrasi dan akun demo
 
-## Pemeriksaan tahap 01
+`npm run db:migrate:deploy` menerapkan migrasi yang tersedia. Gunakan `npm run db:migrate` saat mengembangkan perubahan schema baru dan `npm run db:generate` untuk membuat ulang Prisma Client. Koneksi Prisma menggunakan zona waktu UTC. `received_on` memakai tipe PostgreSQL `DATE` untuk tanggal dokumen di WIB.
+
+Untuk menyiapkan akun demo lokal, set `SEED_DEMO_ENABLED=true` dan isi ketiga pasangan email/password di `.env` setelah migrasi. Gunakan email berbeda untuk masing-masing role dan password 8–128 karakter. Jalankan `npm run db:seed` dari root proyek. Seed menyimpan hash Better Auth dan melewati akun dengan email yang sudah ada. Seed transaksi stok dijadwalkan setelah penerimaan tersedia pada tahap 06.
+
+## Pemeriksaan tahap 02
 
 ```bash
 npm run lint
@@ -136,9 +142,16 @@ npx playwright install chromium --only-shell
 npm run test:e2e
 ```
 
-Isi `TEST_DATABASE_URL` sebelum menjalankan tes integrasi. Pada Compose dengan pengguna default, buat database tes dengan `docker compose exec db createdb -U warehouse warehouse_test`, lalu gunakan URL yang mengarah ke `warehouse_test`. Smoke test memeriksa koneksi Prisma ke PostgreSQL 17 dan inisialisasi Better Auth dengan adapter Prisma. Playwright menguji build produksi pada port `3100`.
+Untuk tes integrasi pada Compose, buat database terpisah dengan `docker compose exec db createdb -U warehouse warehouse_test` lalu isi `TEST_DATABASE_URL` di `.env`. Di terminal khusus tes, jalankan migrasi dengan `DATABASE_URL` yang secara eksplisit menunjuk ke database tes.
 
-`npm run db:generate` menghasilkan ulang Prisma Client. `db:migrate` dan `db:migrate:deploy` siap untuk migrasi tahap 02. `db:seed` dan `limiter:cleanup` menampilkan tahap saat masing-masing mulai tersedia dan keluar dengan kode `1`.
+```powershell
+$env:DATABASE_URL = '<URL PostgreSQL untuk warehouse_test>'
+npm run db:migrate:deploy
+Remove-Item Env:DATABASE_URL
+npm run test:integration
+```
+
+Tes integrasi memeriksa constraint PostgreSQL dan menjalankan CLI seed dengan akun sementara. Fixture schema di-rollback dan tes seed menghapus akun fixture miliknya. Playwright menguji build produksi pada port `3100`. Pembersihan bucket rate limit dijadwalkan pada tahap 09.
 
 ## Deployment dan pengumpulan
 

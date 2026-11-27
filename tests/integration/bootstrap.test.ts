@@ -1,20 +1,15 @@
-import "dotenv/config";
 import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createDb } from "../../src/lib/db";
 import { createWarehouseAuth } from "../../src/lib/auth";
+import { testDatabaseUrl } from "./database";
 
 vi.mock("server-only", () => ({}));
 
 let db: ReturnType<typeof createDb> | undefined;
 
 beforeAll(() => {
-  const url = process.env.TEST_DATABASE_URL;
-  if (!url || url === process.env.DATABASE_URL) {
-    throw new Error("Set TEST_DATABASE_URL ke database khusus tes yang terpisah.");
-  }
-
-  db = createDb(url);
+  db = createDb(testDatabaseUrl());
 });
 
 afterAll(async () => {

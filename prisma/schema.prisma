@@ -1,8 +1,200 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = "ts"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id              String          @id
+  name            String
+  email           String
+  emailVerified   Boolean         @default(false)
+  image           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  role            String          @default("EMPLOYEE")
+  is_active       Boolean         @default(true)
+  sessions        Session[]
+  accounts        Account[]
+  createdItems    Item[]
+  receivedGoods   GoodsReceipt[]
+  requestedItems  ItemRequest[]   @relation("RequestRequester")
+  decidedRequests ItemRequest[]   @relation("RequestDecider")
+  postedMovements StockMovement[]
+  performedAudits AccessAudit[]   @relation("AccessAuditActor")
+  receivedAudits  AccessAudit[]   @relation("AccessAuditTarget")
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MovementDirection {
+  IN
+  OUT
+}
+
+model Item {
+  id          String          @id @default(uuid()) @db.Uuid
+  code        String          @unique
+  name        String
+  unit        String
+  location    String
+  stock       Int             @default(0)
+  createdById String          @map("created_by")
+  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  receipts    GoodsReceipt[]
+  requests    ItemRequest[]
+  movements   StockMovement[]
+
+  @@map("item")
+}
+
+model GoodsReceipt {
+  id              String         @id @default(uuid()) @db.Uuid
+  receiptNo       String         @unique @map("receipt_no")
+  itemId          String         @map("item_id") @db.Uuid
+  quantity        Int
+  receivedOn      DateTime       @map("received_on") @db.Date
+  sourceName      String         @map("source_name")
+  deliveryNoteRef String?        @map("delivery_note_ref")
+  notes           String?
+  receivedById    String         @map("received_by")
+  idempotencyKey  String         @map("idempotency_key") @db.Uuid
+  payloadHash     String         @map("payload_hash")
+  postedAt        DateTime       @default(now()) @map("posted_at") @db.Timestamptz(3)
+  item            Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  receivedBy      User           @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  movement        StockMovement?
+
+  @@unique([receivedById, idempotencyKey])
+  @@index([postedAt, id])
+  @@map("goods_receipt")
+}
+
+model ItemRequest {
+  id              String         @id @default(uuid()) @db.Uuid
+  requestNo       String         @unique @map("request_no")
+  itemId          String         @map("item_id") @db.Uuid
+  quantity        Int
+  requesterId     String         @map("requester_id")
+  notes           String?
+  status          RequestStatus  @default(PENDING)
+  decidedById     String?        @map("decided_by")
+  decidedAt       DateTime?      @map("decided_at") @db.Timestamptz(3)
+  rejectionReason String?        @map("rejection_reason")
+  idempotencyKey  String         @map("idempotency_key") @db.Uuid
+  payloadHash     String         @map("payload_hash")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  item            Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  requester       User           @relation("RequestRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  decidedBy       User?          @relation("RequestDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  movement        StockMovement?
+
+  @@unique([requesterId, idempotencyKey])
+  @@index([requesterId, createdAt])
+  @@index([status, createdAt])
+  @@map("item_request")
+}
+
+model StockMovement {
+  id           BigInt            @id @default(autoincrement())
+  itemId       String            @map("item_id") @db.Uuid
+  direction    MovementDirection
+  quantity     Int
+  balanceAfter Int               @map("balance_after")
+  receiptId    String?           @unique @map("receipt_id") @db.Uuid
+  requestId    String?           @unique @map("request_id") @db.Uuid
+  actorId      String            @map("actor_id")
+  postedAt     DateTime          @default(now()) @map("posted_at") @db.Timestamptz(3)
+  item         Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  receipt      GoodsReceipt?     @relation(fields: [receiptId], references: [id], onDelete: Restrict)
+  request      ItemRequest?      @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  actor        User              @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([itemId, id])
+  @@map("stock_movement")
+}
+
+model RateLimitBucket {
+  keyHash     String   @map("key_hash")
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  count       Int
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@id([keyHash, windowStart])
+  @@index([expiresAt])
+  @@map("rate_limit_bucket")
+}
+
+model AccessAudit {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorId       String   @map("actor_id")
+  targetId      String   @map("target_id")
+  action        String
+  beforeSafe    Json     @map("before_safe")
+  afterSafe     Json     @map("after_safe")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  correlationId String   @map("correlation_id")
+  actor         User     @relation("AccessAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+  target        User     @relation("AccessAuditTarget", fields: [targetId], references: [id], onDelete: Restrict)
+
+  @@map("access_audit")
 }

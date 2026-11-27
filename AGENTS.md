@@ -11,7 +11,7 @@ Dokumen ini ditujukan untuk agent implementasi repository. Paket awal hanya beri
 ## Cara bekerja
 
 1. Baca PRD dan PLAN sebelum perubahan; inspect repository/lockfile sebelum menentukan package/API.
-2. Kerjakan satu tahap PLAN sampai gate terbukti, baru lanjut. Satu tahap satu commit utama bila repository/git tersedia; jangan mengarang SHA atau membuat commit berisi perubahan user yang tidak terkait.
+2. Kerjakan satu tahap PLAN sampai gate terbukti, baru lanjut. Serahkan perubahan dalam kondisi unstaged untuk review. Pemilik repo melakukan commit sendiri.
 3. Jangan overwrite pekerjaan user atau mengubah history untuk menyesuaikan rencana. Selesaikan pekerjaan rutin yang sudah berada dalam scope tanpa meminta izin ulang.
 4. Seluruh keputusan teknis harus dapat dipertanggungjawabkan. Jika ada pendekatan user yang mengganggu kebutuhan wajib, jelaskan konsekuensinya dan pilih perbaikan terkecil yang menjaga tujuan.
 5. Jika ambiguity kecil, tetapkan asumsi konservatif dan catat. Jika mengubah role operasional, kapan stok berkurang, public signup, sumber data, atau scope utama, minta keputusan yang diperlukan sebelum pekerjaan dependen.

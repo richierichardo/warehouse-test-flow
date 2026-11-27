@@ -1,10 +1,10 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01 sudah diimplementasikan. Tahap 02–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01 dan 02 sudah diimplementasikan. Tahap 03–10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
-1. Kerjakan berurutan. Satu tahap menjadi satu commit utama yang runnable sejauh fitur tahap itu; catat perbaikan lanjutan secara jujur.
+1. Kerjakan berurutan dan serahkan perubahan tiap tahap dalam kondisi unstaged. Pemilik repo melakukan commit setelah review.
 2. Gunakan PRD.md sebagai kontrak. Jika menemukan konflik teknis, perbaiki desain paling kecil yang mempertahankan acceptance criteria dan catat alasannya.
 3. Selesaikan P0 terlebih dahulu. Tahap 09/P1 dapat dipangkas bila perlu; jangan mengorbankan correctness atau security.
 4. Per tahap catat file berubah, command aktual, hasil, dan batasan. Checkbox hanya dicentang setelah bukti ada.
@@ -33,7 +33,7 @@ Schema auth dihasilkan ke file sementara dan lolos `prisma validate`. Prisma Cli
 
 ## Tahap 02 — Schema, migrasi, constraint, seed
 
-Status: TODO | Commit: `feat: add warehouse schema constraints and seed`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **Kerja**
 - Generate schema auth dari konfigurasi Better Auth terpilih; simpan sebagai migrasi Prisma bersama model bisnis PRD §9.
@@ -46,6 +46,8 @@ Status: TODO | Commit: `feat: add warehouse schema constraints and seed`
 **Gate**
 - Migrasi dari DB kosong dan seed dua kali aman; constraint menolak stok negatif, kode ganda dan source movement tidak valid.
 - Belum klaim seed transaksi selesai sebelum receiving service dibuat.
+
+Migrasi `20261126080120_init_warehouse` berisi model hasil generator Better Auth, model gudang, serta constraint PostgreSQL. `prisma/seed.ts` membuat akun baru melalui satu transaksi dan mempertahankan akun yang sudah ada. Tes integrasi meliputi schema dan CLI seed. Panduan menjalankan migrasi dan seed tersedia di README.
 
 ## Tahap 03 — Auth, session, dan baseline HTTP security
 
@@ -176,7 +178,7 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | Tahap | Status | Commit aktual | Command/bukti | Batasan |
 | --- | --- | --- | --- | --- |
 | 01 | DONE | `chore: bootstrap next warehouse application` | `npm ci --no-audit --no-fund`, `db:generate`, `auth:generate`, `prisma validate`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (2), `test:e2e` (1), dan `docker compose config --quiet` berhasil. | PostgreSQL 17.11 portabel digunakan pada database terpisah. Engine Docker lokal belum tersedia untuk menjalankan container Compose. |
-| 02 | TODO | — | — | Belum dijalankan |
+| 02 | DONE | — | `auth:generate`, `prisma validate`, `db:generate`, `db:migrate -- --create-only --name init_warehouse`, `db:migrate:deploy` dua kali, `prisma migrate status`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (37), dan `test:e2e` (1) berhasil. | Migrasi dan seed diuji pada PostgreSQL 17.11 portabel di database terpisah. Database aplikasi tetap utuh. Perubahan diserahkan unstaged. |
 | 03 | TODO | — | — | Belum dijalankan |
 | 04 | TODO | — | — | Belum dijalankan |
 | 05 | TODO | — | — | Belum dijalankan |

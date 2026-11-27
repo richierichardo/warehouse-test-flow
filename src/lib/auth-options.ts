@@ -1,5 +1,7 @@
 import type { BetterAuthOptions } from "better-auth";
 
+export const userRoles = ["EMPLOYEE", "WAREHOUSE", "SUPERADMIN"] as const;
+
 export const authOptions = {
   emailAndPassword: { enabled: true, disableSignUp: true },
   session: {
@@ -10,7 +12,7 @@ export const authOptions = {
   user: {
     additionalFields: {
       role: {
-        type: ["EMPLOYEE", "WAREHOUSE", "SUPERADMIN"],
+        type: [...userRoles],
         defaultValue: "EMPLOYEE",
         input: false,
       },
