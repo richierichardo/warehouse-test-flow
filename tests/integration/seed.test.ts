@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { verifyPassword } from "better-auth/crypto";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { createDb } from "../../src/lib/db";
+import { deleteCatalogFixtures } from "../catalog-fixture";
 import { testDatabaseUrl } from "./database";
 
 vi.mock("server-only", () => ({}));
@@ -27,6 +28,8 @@ beforeAll(() => {
 afterAll(async () => {
   if (db) {
     try {
+      const warehouse = await db.user.findUnique({ where: { email: warehouseEmail }, select: { id: true } });
+      if (warehouse) await deleteCatalogFixtures(db, warehouse.id);
       await db.user.deleteMany({ where: { email: { in: emails } } });
     } finally {
       await db.$disconnect();
@@ -83,10 +86,11 @@ it("melewati seed tanpa opt-in dan menolak konfigurasi tidak lengkap tanpa menul
   expect(await demoUsers()).toHaveLength(0);
 }, 20_000);
 
-it("membuat tiga akun credential dan mempertahankan akun yang ada saat seed diulang", async () => {
+it("membuat akun dan satu penerimaan demo serta mempertahankannya saat seed diulang", async () => {
   const initialStock = await stockCounts();
   const first = await runSeed();
   expect(first.stdout).toContain("3 akun dibuat dan 0 akun dilewati");
+  expect(first.stdout).toContain("Penerimaan demo menambahkan 25 RIM.");
   expect(first.stdout).not.toContain(password.trim());
 
   const users = await demoUsers();
@@ -106,10 +110,18 @@ it("membuat tiga akun credential dan mempertahankan akun yang ada saat seed diul
     expect(await verifyPassword({ hash: account.password, password })).toBe(true);
   }
 
+  const warehouse = users.find(({ role }) => role === "WAREHOUSE");
+  if (!warehouse) throw new Error("Akun petugas demo belum dibuat.");
+  const receipts = await db.goodsReceipt.findMany({ where: { receivedById: warehouse.id }, include: { item: true, movement: true } });
+  expect(receipts).toHaveLength(1);
+  expect(receipts[0]).toMatchObject({ quantity: 25, item: { stock: 25, unit: "RIM" }, movement: { direction: "IN", quantity: 25, balanceAfter: 25 } });
+
   await db.user.update({ where: { email: employeeEmail }, data: { role: "WAREHOUSE", is_active: false } });
   const beforeRepeat = await demoUsers();
   const repeat = await runSeed({ SEED_EMPLOYEE_PASSWORD: randomBytes(24).toString("hex") });
   expect(repeat.stdout).toContain("0 akun dibuat dan 3 akun dilewati");
+  expect(repeat.stdout).toContain("Penerimaan demo sudah tercatat.");
   expect(await demoUsers()).toEqual(beforeRepeat);
-  expect(await stockCounts()).toEqual(initialStock);
+  expect(await stockCounts()).toEqual([initialStock[0] + 1, initialStock[1] + 1, initialStock[2], initialStock[3] + 1]);
+  expect(await db.item.findUnique({ where: { id: receipts[0].itemId }, select: { stock: true } })).toEqual({ stock: 25 });
 }, 25_000);

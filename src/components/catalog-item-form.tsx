@@ -1,18 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore, type SubmitEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { itemFieldLimits, type CatalogItem } from "@/modules/catalog/schema";
+import { useHydrated } from "./use-hydrated";
 
 const fields = [
   ["code", "Kode barang"], ["name", "Nama barang"], ["unit", "Satuan"], ["location", "Lokasi rak"],
 ] as const;
 
-const subscribeToHydration = () => () => {};
-
 export function CatalogItemForm({ item, metadataLocked = false }: { item?: CatalogItem; metadataLocked?: boolean }) {
   // The server-rendered form must wait for its client-side submit handler.
-  const hydrated = useSyncExternalStore(subscribeToHydration, () => true, () => false);
+  const hydrated = useHydrated();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 

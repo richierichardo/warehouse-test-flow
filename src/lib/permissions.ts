@@ -1,7 +1,7 @@
 import "server-only";
 
-import { userRoles } from "./auth-options";
-import { HttpError } from "./http";
+import { userRoles } from "./auth-options.ts";
+import { HttpError } from "./http.ts";
 
 type Role = (typeof userRoles)[number];
 

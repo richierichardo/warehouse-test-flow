@@ -1,9 +1,11 @@
 import "dotenv/config";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { z } from "zod";
 import { userRoles } from "../src/lib/auth-options.ts";
 import { createDb } from "../src/lib/db.ts";
+import { receiveGoodsSchema } from "../src/modules/receiving/schema.ts";
+import { receiveGoods } from "../src/modules/receiving/service.ts";
 
 const accountNames = {
   EMPLOYEE: "Karyawan Demo",
@@ -16,6 +18,23 @@ const seedAccountSchema = z.object({
   email: z.string().trim().toLowerCase().pipe(z.email()),
   password: z.string().min(8).max(128),
 });
+
+async function seedReceipt(db: ReturnType<typeof createDb>, email: string) {
+  const warehouse = await db.user.findUnique({ where: { email }, select: { id: true, role: true, is_active: true } });
+  if (!warehouse?.is_active || warehouse.role !== "WAREHOUSE") {
+    console.log("Penerimaan demo dilewati karena akun petugas demo tidak aktif atau memiliki role lain.");
+    return;
+  }
+
+  const code = `DEMO-A4-${createHash("sha256").update(warehouse.id).digest("hex").slice(0, 20).toUpperCase()}`;
+  await db.item.createMany({ data: { code, name: "Kertas A4 Demo", unit: "RIM", location: "Rak Demo", createdById: warehouse.id }, skipDuplicates: true });
+  const item = await db.item.findUniqueOrThrow({ where: { code }, select: { id: true, createdById: true } });
+  if (item.createdById !== warehouse.id) throw new Error("Kode barang demo sudah digunakan akun lain.");
+
+  const input = receiveGoodsSchema.parse({ itemId: item.id, quantity: 25, receivedOn: "2026-11-26", sourceName: "Penerimaan Demo" });
+  const result = await receiveGoods(db, { id: warehouse.id, role: warehouse.role }, "16f06a72-18ba-4967-96c8-8b62941e12fd", input);
+  console.log(result.status === 201 ? "Penerimaan demo menambahkan 25 RIM." : "Penerimaan demo sudah tercatat.");
+}
 
 async function seed() {
   if (process.env.SEED_DEMO_ENABLED !== "true") {
@@ -74,7 +93,9 @@ async function seed() {
       return newIds.size;
     });
 
-    console.log(`Seed demo selesai. ${created} akun dibuat dan ${users.length - created} akun dilewati.`);
+    console.log(`Seed akun demo selesai. ${created} akun dibuat dan ${users.length - created} akun dilewati.`);
+    const warehouse = users.find(({ role }) => role === "WAREHOUSE");
+    if (warehouse) await seedReceipt(db, warehouse.email);
   } finally {
     await db.$disconnect();
   }

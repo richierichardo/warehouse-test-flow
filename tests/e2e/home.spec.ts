@@ -32,7 +32,7 @@ test.afterAll(async () => {
     await db.user.deleteMany({ where: { id: { in: users.map(({ id }) => id) } } });
     const secret = process.env.WAREHOUSE_E2E_RATE_SECRET;
     if (secret) {
-      const identities = ["login\0shared", "auth\0shared", ...users.map(({ id }) => `write\0${id}`)];
+      const identities = ["login\0shared", "auth\0shared", ...users.flatMap(({ id }) => [`read\0${id}`, `write\0${id}`])];
       const keys = identities.map((identity) => createHmac("sha256", secret).update(identity).digest("hex"));
       await db.rateLimitBucket.deleteMany({ where: { keyHash: { in: keys } } });
     }
@@ -175,4 +175,63 @@ test("menampilkan pesan login generik dan waktu tunggu 429", async ({ page }) =>
   await page.getByRole("button", { name: "Masuk" }).click();
   await expect(page.getByRole("main").getByRole("status")).toHaveText(/Coba lagi dalam \d+ detik/);
   await expect(page.getByRole("button", { name: "Masuk" })).toBeDisabled();
+});
+
+test("petugas mencatat penerimaan dan melihat saldo di kartu stok pada ponsel", async ({ page }) => {
+  test.setTimeout(140_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, users[1].email);
+  await page.getByRole("link", { name: "Penerimaan", exact: true }).click();
+  await page.getByRole("link", { name: "Catat penerimaan" }).click();
+  await expect(page.getByLabel("Tanggal penerimaan (WIB)")).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
+  await page.getByLabel("Cari barang berdasarkan kode atau nama").fill(catalogCode);
+  await page.getByRole("button", { name: "Cari barang", exact: true }).click();
+  await page.getByRole("button", { name: `${catalogCode} · ${catalogName} · RIM` }).click();
+  await page.getByLabel("Jumlah", { exact: true }).fill("12");
+  await page.getByLabel("Tanggal penerimaan (WIB)").fill("2024-02-29");
+  await page.getByLabel("Asal barang").fill("Toko ATK browser");
+  await page.getByLabel("Nomor surat jalan (opsional)").fill("SJ-BROWSER");
+  await page.getByLabel("Catatan (opsional)").fill("Diuji melalui form");
+
+  let firstKey: string | undefined;
+  await page.route("**/api/receipts", async (route) => {
+    firstKey = route.request().headers()["idempotency-key"];
+    await route.fulfill({ status: 503, json: { error: { message: "Layanan sementara tidak tersedia." } } });
+  });
+  await page.getByRole("button", { name: "Simpan penerimaan" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Layanan sementara tidak tersedia." })).toBeVisible();
+  expect(firstKey).toMatch(/^[a-f\d-]{36}$/i);
+  await page.unroute("**/api/receipts");
+
+  const [response] = await Promise.all([
+    page.waitForResponse((result) => new URL(result.url()).pathname === "/api/receipts" && result.request().method() === "POST", { timeout: 35_000 }),
+    page.getByRole("button", { name: "Simpan penerimaan" }).click(),
+  ]);
+  expect(response.status()).toBe(201);
+  expect(response.request().headers()["idempotency-key"]).toBe(firstKey);
+  const { data: { receiptNo } } = await response.json();
+  await expect(page.getByRole("heading", { name: "Penerimaan tersimpan" })).toBeVisible();
+  await expect(page.getByText("Saldo setelah penerimaan 1.262")).toBeVisible();
+
+  await page.getByRole("link", { name: "Lihat riwayat penerimaan" }).click();
+  const entry = page.getByRole("listitem").filter({ hasText: receiptNo });
+  await expect(entry.getByText("SJ-BROWSER")).toBeVisible();
+  await expect(entry.getByText("Diuji melalui form")).toBeVisible();
+  await page.getByRole("link", { name: "Kartu Stok", exact: true }).click();
+  await expect(entry.getByText("+12 RIM", { exact: true })).toBeVisible();
+  await expect(entry.getByText("1.262 RIM", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test("superadmin membaca penerimaan dan kartu stok dengan akses baca", async ({ page }) => {
+  test.setTimeout(105_000);
+  await login(page, users[2].email);
+  await page.getByRole("link", { name: "Penerimaan", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Penerimaan", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `${catalogCode} · ${catalogName}` }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Catat penerimaan" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Kartu Stok", exact: true }).click();
+  await expect(page.getByText("+1.250 RIM", { exact: true })).toBeVisible();
+  await page.goto("/penerimaan/baru");
+  await expect(page).toHaveURL("/akses-ditolak");
 });

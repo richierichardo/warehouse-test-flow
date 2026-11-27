@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan login, katalog barang, ruang kerja dengan navigasi sesuai role, schema PostgreSQL, dan CLI seed. Petugas gudang dapat menambah barang dan mengedit metadata katalog. Penerimaan barang dijadwalkan pada tahap 06. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan login, katalog barang, penerimaan, dan kartu stok masuk dengan navigasi sesuai role. Petugas gudang dapat mengelola metadata barang dan mencatat penerimaan. Superadmin dapat membaca riwayat penerimaan dan kartu stok. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -122,7 +122,7 @@ Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `
 | `RATE_LIMIT_KEY_SECRET` | Secret HMAC untuk limiter auth berbasis IP dan limiter bisnis berbasis akun |
 | `TRUSTED_PROXY_MODE` | `direct` lokal atau `nginx` pada deployment yang sesuai |
 | `TRUSTED_PROXY_SECRET` | Secret 64 digit hex yang dibagikan dengan Nginx dalam mode `nginx` |
-| `SEED_DEMO_ENABLED` | Set `true` untuk mengizinkan pembuatan akun demo |
+| `SEED_DEMO_ENABLED` | Set `true` untuk membuat akun dan satu penerimaan demo |
 | `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD` | Akun demo karyawan |
 | `SEED_WAREHOUSE_EMAIL`, `SEED_WAREHOUSE_PASSWORD` | Akun demo gudang |
 | `SEED_SUPERADMIN_EMAIL`, `SEED_SUPERADMIN_PASSWORD` | Akun demo administrator |
@@ -131,7 +131,7 @@ Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `
 
 `npm run db:migrate:deploy` menerapkan migrasi yang tersedia. Gunakan `npm run db:migrate` saat mengembangkan perubahan schema baru dan `npm run db:generate` untuk membuat ulang Prisma Client. Koneksi Prisma menggunakan zona waktu UTC. `received_on` memakai tipe PostgreSQL `DATE` untuk tanggal dokumen di WIB.
 
-Untuk menyiapkan akun demo lokal, set `SEED_DEMO_ENABLED=true` dan isi ketiga pasangan email/password di `.env` setelah migrasi. Gunakan email berbeda untuk masing-masing role dan password 8–128 karakter. Jalankan `npm run db:seed` dari root proyek. Seed menyimpan hash Better Auth dan melewati akun dengan email yang sudah ada. Seed transaksi stok dijadwalkan setelah penerimaan tersedia pada tahap 06.
+Untuk menyiapkan akun demo lokal, set `SEED_DEMO_ENABLED=true` dan isi ketiga pasangan email/password di `.env` setelah migrasi. Gunakan email berbeda untuk masing-masing role dan password 8–128 karakter. Jalankan `npm run db:seed` dari root proyek. Seed menyimpan hash Better Auth dan melewati akun dengan email yang sudah ada. Bila akun petugas demo aktif dan ber-role `WAREHOUSE`, seed menambahkan 25 RIM Kertas A4 Demo melalui service penerimaan. Pengulangan seed memakai key yang sama sehingga stok tidak bertambah lagi.
 
 ### Endpoint auth
 
@@ -161,7 +161,19 @@ Semua role bisa membuka `/katalog` untuk mencari berdasarkan kode atau nama, men
 
 Kode dinormalisasi ke huruf kapital. Batas panjang untuk kode, nama, satuan, dan lokasi masing-masing 64, 160, 32, dan 120 karakter setelah dirapikan. Metadata pagination berada pada `meta` dengan field `page`, `limit`, `total`, dan `totalPages`.
 
-## Pemeriksaan tahap 05
+### Penerimaan dan kartu stok masuk
+
+Petugas membuka **Penerimaan → Catat penerimaan**, memilih satu barang dari hasil pencarian, lalu mengisi jumlah, tanggal dokumen, dan asal barang. Nomor surat jalan dan catatan opsional. Selesai simpan, petugas dapat membuka riwayat penerimaan atau kartu stok untuk melihat saldo setelah mutasi dalam satuan barang. Superadmin dapat membuka kedua riwayat. Mutasi keluar dijadwalkan pada tahap 08.
+
+| Endpoint | Kontrak |
+| --- | --- |
+| `POST /api/receipts` | Petugas mengirim `itemId`, `quantity`, `receivedOn`, `sourceName`, `deliveryNoteRef` opsional dan `notes` opsional. Header `Idempotency-Key` wajib UUID. Penerimaan baru `201`, replay payload yang sama `200`, konflik key `409`. |
+| `GET /api/receipts` | Riwayat untuk petugas dan superadmin. Filter `itemId`, `from`, `to`, `page`, `limit`. Rentang tanggal dokumen inklusif dan hasil diurutkan dari waktu posting terbaru. |
+| `GET /api/movements` | Kartu stok masuk untuk petugas dan superadmin. Filter yang sama memakai tanggal posting WIB. Hasil diurutkan menurut ID posting terbaru. ID mutasi dikirim sebagai string. |
+
+Jumlah berupa integer JSON antara 1 dan 1.000.000. Saldo maksimal 2.000.000.000. Tanggal dokumen memakai `YYYY-MM-DD` dan boleh lebih awal dari hari posting. Server merapikan teks dan memakai `null` untuk field opsional kosong sebelum menghitung hash dari enam field payload dalam urutan tetap. Form mempertahankan key saat mengulang pengiriman dengan isian yang sama. Pendataan tanggal mundur tetap mengikuti urutan posting kartu stok.
+
+## Pemeriksaan tahap 06
 
 ```bash
 npm run lint
@@ -182,9 +194,9 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog memakai Route Handler produksi dan PostgreSQL untuk menguji izin, kode ganda, serta penguncian histori. Tes RBAC memakai server HTTP fixture untuk memeriksa guard dan filter kepemilikan.
+Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js untuk memeriksa limiter bersama dan dapat menunggu window berikutnya hingga satu menit. Tes katalog dan penerimaan memakai Route Handler produksi dan PostgreSQL. Tes penerimaan menahan transaksi independen untuk membuktikan perilaku retry paralel dan konflik key, serta menyuntikkan kegagalan insert ledger untuk membuktikan rollback. Tes RBAC memakai server HTTP fixture untuk memeriksa guard dan filter kepemilikan.
 
-`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai fixture sementara untuk menguji auth, pencarian katalog, serta tambah dan edit barang. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
+`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai fixture sementara untuk menguji auth, katalog, pengiriman ulang form penerimaan, kartu stok di ponsel, dan akses baca superadmin. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
 
 ### Proxy Nginx untuk produksi
 

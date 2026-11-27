@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–05 sudah diimplementasikan. Tahap 06–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–06 sudah diimplementasikan. Tahap 07–10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
@@ -91,7 +91,7 @@ Guard bisnis, scope pemilik permintaan, dan kuota per akun diuji melalui server 
 
 ## Tahap 05 — Katalog
 
-Status: DONE | Commit: menunggu review pemilik repo
+Status: DONE | Commit: `52bce21`
 
 **Kerja**
 - List/search/pagination katalog dan form create/edit gudang.
@@ -109,7 +109,7 @@ Edit kode atau satuan mengunci baris barang terlebih dahulu, lalu memeriksa hist
 
 ## Tahap 06 — Penerimaan dan kartu stok masuk
 
-Status: TODO | Commit: `feat: record idempotent receipts and incoming movements`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **1. Kontrak dan validasi**
 
@@ -137,6 +137,8 @@ Status: TODO | Commit: `feat: record idempotent receipts and incoming movements`
 - AC06. Gunakan request dan koneksi PostgreSQL independen untuk membuktikan bahwa retry paralel dengan key setara menghasilkan satu receipt, satu mutasi `IN`, dan satu penambahan saldo. Dua penerimaan valid dengan key berbeda pada item sama harus tercatat dua kali dengan saldo berurutan.
 - AC15. Picu kegagalan terkontrol saat insert mutasi di PostgreSQL tes setelah saldo diperbarui. Pastikan saldo, receipt, dan ledger kembali ke keadaan awal. Jalankan ulang seed demo dan verifikasi hanya ada satu dampak stok.
 - AC22. Posting penerimaan bertanggal dokumen lebih lama setelah penerimaan sebelumnya. Verifikasi urutan sequence, `balanceAfter`, dan rekonsiliasi saldo. Uji tampilan browser untuk penerimaan, kartu stok, dan akses baca superadmin. Jalankan lint, typecheck, unit, integration, e2e, serta production build sebelum menutup tahap. Serahkan perubahan unstaged.
+
+Tes HTTP produksi membuktikan retry dengan satu key, dua penerimaan sah dengan key berbeda, dan konflik unique key pada barang berbeda ketika transaksi berjalan paralel. Kegagalan insert ledger setelah update stok membatalkan penerimaan dan saldo. Tes browser memverifikasi pemakaian ulang key sesudah respons sementara `503`, kartu stok pada lebar 390 piksel, dan akses baca superadmin. Seed yang diulang mempertahankan satu penerimaan demo sebesar 25 RIM.
 
 ## Tahap 07 — Permintaan karyawan
 
@@ -209,8 +211,8 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | 02 | DONE | `5a9cdc2` | `auth:generate`, `prisma validate`, `db:generate`, `db:migrate -- --create-only --name init_warehouse`, `db:migrate:deploy` dua kali, `prisma migrate status`, `lint`, `typecheck`, `build`, `test:unit` (4), `test:integration` (37), dan `test:e2e` (1) berhasil. | Migrasi dan seed diuji pada PostgreSQL 17.11 portabel di database terpisah. Database aplikasi tetap utuh. Perubahan diserahkan unstaged. |
 | 03 | DONE | `df68190` | `db:migrate:deploy` di database tes, `lint`, `typecheck`, `next build --webpack`, `test:unit` (15), `test:integration` (46), `test:e2e` (1), dan smoke login HTTP development di loopback berhasil. | Tes HTTP memakai PostgreSQL 17.11 portabel dan upstream Next.js loopback. Webpack dipakai setelah error source map Turbopack di Windows. Perubahan diserahkan unstaged. |
 | 04 | DONE | `209a78a` | `db:migrate:deploy` pada database tes, `lint`, `typecheck`, `build`, `test:unit` (32), `test:integration` (52), dan `test:e2e` (5) berhasil. | Playwright memakai Next development pada loopback. Tes RBAC bisnis memakai HTTP fixture dan PostgreSQL 17.11 portabel. Perubahan diserahkan unstaged. |
-| 05 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (50), `test:integration` (59), dan `test:e2e` (6) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright memakai Next development pada loopback. Perubahan diserahkan unstaged. |
-| 06 | TODO | — | Rencana implementasi dan pengujian tercatat pada tahap 06. | Implementasi belum dimulai. |
+| 05 | DONE | `52bce21` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (50), `test:integration` (59), dan `test:e2e` (6) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright memakai Next development pada loopback. Perubahan diserahkan unstaged. |
+| 06 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (69), `test:integration` (67), dan `test:e2e` (8) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Browser mencatat satu peringatan deprecation dari driver `pg` tentang query yang masih berjalan. Seluruh tes lulus dan perubahan diserahkan unstaged. |
 | 07 | TODO | — | — | Belum dijalankan |
 | 08 | TODO | — | — | Belum dijalankan |
 | 09 | TODO | — | — | Belum dijalankan |

@@ -1,0 +1,3 @@
+export const inputClass = "min-h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700";
+export const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md bg-[#136760] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e514c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-60";
+export const secondaryClass = "inline-flex min-h-11 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:opacity-60";
