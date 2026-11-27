@@ -33,6 +33,9 @@ it("memulai Better Auth dengan adapter Prisma", async () => {
 
   vi.stubEnv("BETTER_AUTH_SECRET", randomBytes(32).toString("hex"));
   vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
+  vi.stubEnv("APP_ORIGIN", "http://localhost:3000");
+  vi.stubEnv("RATE_LIMIT_KEY_SECRET", randomBytes(32).toString("hex"));
+  vi.stubEnv("TRUSTED_PROXY_MODE", "direct");
   const context = await createWarehouseAuth(db).$context;
 
   expect(context.adapter.id.toLowerCase()).toContain("prisma");

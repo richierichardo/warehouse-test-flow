@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan halaman awal, schema PostgreSQL, migrasi awal, dan CLI untuk membuat akun demo. Login dan logout dijadwalkan pada tahap 03. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan halaman awal, schema PostgreSQL, CLI seed, dan endpoint login, session, serta logout. Halaman login dan navigasi per role dijadwalkan pada tahap 04. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -107,6 +107,8 @@ npm run dev
 
 Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. [Halaman awal lokal](http://localhost:3000)
 
+`dev` dan `build` memakai Webpack karena build jalur auth memicu error source map Turbopack pada lingkungan Windows yang diuji.
+
 Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `node -p "require('node:crypto').randomBytes(32).toString('hex')"` dua kali. Simpan satu hasil ke `BETTER_AUTH_SECRET` dan satu lagi ke `RATE_LIMIT_KEY_SECRET`. Jika mengubah password atau port Compose, sesuaikan `DATABASE_URL`.
 
 | Environment variable | Tujuan |
@@ -119,6 +121,7 @@ Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `
 | `APP_ORIGIN` | Satu origin sah untuk mutation; harus konsisten dengan URL auth |
 | `RATE_LIMIT_KEY_SECRET` | Secret HMAC untuk identitas limiter berbasis IP |
 | `TRUSTED_PROXY_MODE` | `direct` lokal atau `nginx` pada deployment yang sesuai |
+| `TRUSTED_PROXY_SECRET` | Secret 64 digit hex yang dibagikan dengan Nginx dalam mode `nginx` |
 | `SEED_DEMO_ENABLED` | Set `true` untuk mengizinkan pembuatan akun demo |
 | `SEED_EMPLOYEE_EMAIL`, `SEED_EMPLOYEE_PASSWORD` | Akun demo karyawan |
 | `SEED_WAREHOUSE_EMAIL`, `SEED_WAREHOUSE_PASSWORD` | Akun demo gudang |
@@ -130,14 +133,24 @@ Jika `.env` disalin dari contoh, buat dua secret independen dengan menjalankan `
 
 Untuk menyiapkan akun demo lokal, set `SEED_DEMO_ENABLED=true` dan isi ketiga pasangan email/password di `.env` setelah migrasi. Gunakan email berbeda untuk masing-masing role dan password 8–128 karakter. Jalankan `npm run db:seed` dari root proyek. Seed menyimpan hash Better Auth dan melewati akun dengan email yang sudah ada. Seed transaksi stok dijadwalkan setelah penerimaan tersedia pada tahap 06.
 
-## Pemeriksaan tahap 02
+### Endpoint auth
+
+| Method dan path | Kontrak |
+| --- | --- |
+| `POST /api/auth/sign-in/email` | JSON berisi `email` dan `password`. Respons sukses memuat profil pengguna dan mengirim cookie session. |
+| `GET /api/auth/get-session` | Mengembalikan profil dan waktu kedaluwarsa session, atau `null` jika session sudah tidak berlaku. |
+| `POST /api/auth/sign-out` | Body kosong atau `{}`. Mencabut session di database dan menghapus cookie. |
+
+Request POST memerlukan `Origin` yang sama dengan `APP_ORIGIN`. Set `BETTER_AUTH_URL` ke origin yang sama. Gunakan `npm run dev` untuk HTTP loopback. Auth pada build produksi memerlukan origin HTTPS. Setiap session berlaku delapan jam sejak dibuat. Respons `429` menyertakan `Retry-After` dalam detik.
+
+## Pemeriksaan tahap 03
 
 ```bash
 npm run lint
 npm run typecheck
 npm run test:unit
-npm run test:integration
 npm run build
+npm run test:integration
 npx playwright install chromium --only-shell
 npm run test:e2e
 ```
@@ -151,7 +164,29 @@ Remove-Item Env:DATABASE_URL
 npm run test:integration
 ```
 
-Tes integrasi memeriksa constraint PostgreSQL dan menjalankan CLI seed dengan akun sementara. Fixture schema di-rollback dan tes seed menghapus akun fixture miliknya. Playwright menguji build produksi pada port `3100`. Pembersihan bucket rate limit dijadwalkan pada tahap 09.
+Jalankan `npm run build` sebelum tes integrasi. Tes memakai akun dan bucket sementara, serta menjalankan beberapa proses Next.js pada port loopback untuk memeriksa limiter bersama. Tes limiter menunggu window berikutnya hingga satu menit. Playwright menguji halaman awal pada port `3100`. Pembersihan bucket rate limit dijadwalkan pada tahap 09.
+
+### Proxy Nginx untuk produksi
+
+Gunakan `TRUSTED_PROXY_MODE=nginx` dan buat `TRUSTED_PROXY_SECRET` dengan perintah pembuat secret 64 digit hex di atas. Jalankan `npm run start` pada loopback dan gunakan blok berikut pada virtual host HTTPS yang memiliki origin sesuai konfigurasi aplikasi.
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Forwarded-Host "";
+    proxy_set_header X-Real-IP "";
+    proxy_set_header X-Warehouse-Verified-IP "";
+    proxy_set_header X-Warehouse-Client-IP $remote_addr;
+    include /etc/nginx/snippets/warehouse-proxy-secret.conf;
+    client_max_body_size 32k;
+}
+```
+
+Simpan direktif `proxy_set_header X-Warehouse-Proxy-Token "<secret-proxy>";` di file include privat di server. Gunakan nilai yang sama dengan `TRUSTED_PROXY_SECRET` aplikasi. Mode `direct` dan request dengan bukti proxy yang tidak sah memakai kuota bersama. Konfigurasi virtual host dan TLS divalidasi saat deployment tahap 10.
 
 ## Deployment dan pengumpulan
 

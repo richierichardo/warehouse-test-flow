@@ -6,6 +6,7 @@ const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 const nextConfig = {
   turbopack: { root: projectRoot },
   outputFileTracingRoot: projectRoot,
+  serverExternalPackages: ["better-auth", "@better-auth/prisma-adapter"],
 };
 
 export default nextConfig;

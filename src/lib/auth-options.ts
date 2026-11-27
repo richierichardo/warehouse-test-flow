@@ -7,6 +7,7 @@ export const authOptions = {
   session: {
     expiresIn: 8 * 60 * 60,
     disableSessionRefresh: true,
+    deferSessionRefresh: true,
     cookieCache: { enabled: false },
   },
   user: {
