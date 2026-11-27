@@ -38,3 +38,7 @@ export function consumeAuthQuota(db: PrismaClient, secret: string, bucket: AuthB
 export function consumeBusinessQuota(db: PrismaClient, secret: string, bucket: BusinessBucket, actorId: string) {
   return consumeQuota(db, secret, bucket, actorId, businessLimits[bucket]);
 }
+
+export function deleteExpiredBuckets(db: PrismaClient) {
+  return db.$executeRaw`DELETE FROM rate_limit_bucket WHERE expires_at <= statement_timestamp()`;
+}

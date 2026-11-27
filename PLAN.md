@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–08 sudah diimplementasikan. Tahap 09–10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–09 sudah diimplementasikan. Tahap 10 berstatus `TODO`.
 
 ## Aturan pengerjaan
 
@@ -160,7 +160,7 @@ Tes HTTP membuktikan bahwa dua koneksi PostgreSQL yang bersaing dengan key sama 
 
 ## Tahap 08 — Approval, rejection, dan concurrency gate
 
-Status: DONE | Commit: menunggu review pemilik repo
+Status: DONE | Commit: `8da6fbf`
 
 **Kerja**
 - Approval lock request lalu item, cek state+stok terbaru, update saldo, satu OUT dan decision dalam satu transaksi.
@@ -180,7 +180,7 @@ Tes HTTP dengan koneksi PostgreSQL independen mengamati kedua transaksi menunggu
 
 ## Tahap 09 — Superadmin terbatas dan verifikasi security menyeluruh
 
-Status: TODO | Commit: `feat: add access administration and verify security boundaries`
+Status: DONE | Commit: menunggu review pemilik repo
 
 **Kerja**
 - UI daftar akun, perubahan role/status, revoke sessions, safe audit; account creation UI di luar scope.
@@ -193,6 +193,10 @@ Status: TODO | Commit: `feat: add access administration and verify security boun
 **Gate**
 - Tidak ada path privilege escalation atau auth/rate bypass. Seluruh P0 tetap lolos.
 - Jika scope P1 harus ditunda, catat tepat fitur UI yang belum dibuat; keamanan P0 tidak ditunda.
+
+Halaman Akun dan Audit menyediakan perubahan akses, pencabutan sesi, dan riwayat dengan DTO allowlist. Advisory lock dan pemeriksaan ulang pelaku diterapkan pada kedua mutasi. Tes HTTP lintas proses membuktikan satu superadmin tetap aktif dan kegagalan pencatatan audit membatalkan perubahan akun dan sesi.
+
+Regresi AC17–AC21 mencakup kuota lintas proses dan restart, pergantian window, batas origin dan body, spoofed IP, data persisten, pembatasan operasi superadmin, dan `503` saat penyimpanan limiter gagal. CLI cleanup diuji terhadap bucket aktif dan kedaluwarsa. Dua konteks Chromium memverifikasi perubahan role, akses setelah login ulang, pencabutan manual, audit, serta pesan `429`. Uji HTTPS dengan proxy Nginx aktual tercakup tahap 10.
 
 ## Tahap 10 — QA, deployment/demo dan pengumpulan
 
@@ -222,6 +226,6 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | 05 | DONE | `52bce21` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (50), `test:integration` (59), dan `test:e2e` (6) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright memakai Next development pada loopback. Perubahan diserahkan unstaged. |
 | 06 | DONE | `f2b9d82` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (69), `test:integration` (67), dan `test:e2e` (8) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Browser mencatat satu peringatan deprecation dari driver `pg` tentang query yang masih berjalan. Seluruh tes lulus dan perubahan diserahkan unstaged. |
 | 07 | DONE | `dd74d7d` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (84), `test:integration` (73), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Regresi browser penerimaan kembali mencatat peringatan deprecation driver `pg`. Perubahan diserahkan unstaged. |
-| 08 | DONE | — | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (95), `test:integration` (81), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright kembali mencatat peringatan deprecation driver `pg` tentang query yang masih berjalan. Perubahan diserahkan unstaged. |
-| 09 | TODO | — | — | Belum dijalankan |
+| 08 | DONE | `8da6fbf` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (95), `test:integration` (81), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright kembali mencatat peringatan deprecation driver `pg` tentang query yang masih berjalan. Perubahan diserahkan unstaged. |
+| 09 | DONE | — | `db:migrate:deploy`, `lint`, `typecheck`, `build`, `test:unit` (103), `test:integration` (87), dan 10 skenario browser. `test:e2e` meluluskan 8 skenario saat percobaan awal. Dua skenario yang tersisa lulus lewat `test:e2e -- --grep 'perubahan akses\|WAREHOUSE masuk'` setelah kompilasi route admin dilakukan sebelumnya dan penantian logout disesuaikan. | PostgreSQL 17.11 portabel pada dua database tes terpisah. Next development memuat ulang pada percobaan awal, dan driver `pg` masih mencatat peringatan deprecation pada regresi. Perubahan diserahkan unstaged. |
 | 10 | TODO | — | — | Belum dijalankan |

@@ -120,7 +120,7 @@ async function checkDecisions(page: Page) {
 
 for (const user of users) {
   test(`${user.role} masuk dan melihat navigasi sesuai izin`, async ({ page }) => {
-    test.setTimeout(user.role === "WAREHOUSE" ? 155_000 : 105_000);
+    test.setTimeout(user.role === "WAREHOUSE" ? 195_000 : 130_000);
     if (user.role === "EMPLOYEE") await page.setViewportSize({ width: 390, height: 844 });
     await login(page, user.email);
     const nav = page.getByRole("navigation", { name: "Navigasi ruang kerja" });
@@ -173,8 +173,12 @@ for (const user of users) {
       await expect(page.getByRole("heading", { name: "Akun" })).toHaveCount(0);
       await page.goto("/katalog");
     }
-    await page.getByRole("button", { name: "Keluar" }).click();
-    await expect(page).toHaveURL("/login");
+    const [logout] = await Promise.all([
+      page.waitForResponse((response) => new URL(response.url()).pathname === "/api/auth/sign-out" && response.request().method() === "POST", { timeout: 40_000 }),
+      page.getByRole("button", { name: "Keluar" }).click(),
+    ]);
+    expect(logout.status()).toBe(200);
+    await expect(page).toHaveURL("/login", { timeout: 40_000 });
     await page.goto("/katalog");
     await expect(page).toHaveURL("/login");
   });

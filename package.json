@@ -21,7 +21,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "node --conditions=react-server prisma/seed.ts",
-    "limiter:cleanup": "node scripts/deferred.mjs 09",
+    "limiter:cleanup": "node --conditions=react-server scripts/limiter-cleanup.ts",
     "auth:generate": "auth generate --config scripts/auth-schema.config.ts --adapter prisma --dialect postgresql",
     "postinstall": "prisma generate"
   },

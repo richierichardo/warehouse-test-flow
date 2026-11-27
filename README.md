@@ -2,7 +2,7 @@
 
 Aplikasi katalog dan stok perlengkapan kantor untuk satu gudang. Karyawan mengajukan permintaan; petugas mencatat penerimaan dan memutuskan permintaan. Stok berkurang hanya setelah persetujuan berhasil.
 
-Proyek menyediakan login, katalog barang, penerimaan, pengajuan karyawan, keputusan petugas, dan kartu stok masuk dan keluar. Petugas gudang mengelola permintaan. Superadmin dapat membaca antrean permintaan dan kartu stok. [Log eksekusi](PLAN.md#log-eksekusi)
+Proyek menyediakan login, katalog barang, penerimaan, pengajuan karyawan, keputusan petugas, dan kartu stok masuk dan keluar. Superadmin mengelola akses akun dan membaca audit serta riwayat operasional. [Log eksekusi](PLAN.md#log-eksekusi)
 
 ## Dokumen
 
@@ -189,7 +189,19 @@ Satu key berlaku per pemohon. UUID barang, jumlah, dan catatan yang sudah dirapi
 
 Petugas membuka detail permintaan berstatus **Menunggu**, lalu memilih **Setujui** atau **Tolak** dan mengonfirmasi keputusan. Server mengambil pelaku dari sesi dan memeriksa stok terkini saat persetujuan. Persetujuan ulang dan penolakan ulang dengan alasan yang sama mengembalikan keputusan awal dengan `200`. Aksi berlawanan atau penggantian alasan atas keputusan terminal menghasilkan `409 ALREADY_DECIDED`.
 
-## Pemeriksaan tahap 08
+### Administrasi akses dan audit
+
+Superadmin membuka **Akun** untuk mengubah role atau status aktif, dan menggunakan **Cabut sesi** untuk mengakhiri seluruh sesi akun lain. Perubahan akses mencabut sesi target pada transaksi yang sama dengan audit. Pengguna yang masih aktif masuk kembali untuk memakai izin barunya. Menu **Audit** menampilkan pelaku, target, perubahan, waktu WIB, dan ID korelasi.
+
+| Endpoint | Kontrak |
+| --- | --- |
+| `GET /api/admin/users` | Daftar akun khusus superadmin. Filter `page` dan `limit`, default 20 dan maksimal 100. |
+| `PATCH /api/admin/users/:id/access` | Kirim `role`, `isActive`, atau keduanya. Payload yang sama dengan kondisi akun mengembalikan `200`. Aksi terhadap akun sendiri menghasilkan `403 SELF_ACCESS`. |
+| `POST /api/admin/users/:id/revoke-sessions` | Kirim `{}`. Respons menyertakan akun dan jumlah sesi yang dicabut, dengan audit pencabutan tersimpan. |
+
+Jalankan `npm run limiter:cleanup` dengan `DATABASE_URL` lingkungan yang akan dirawat. Perintah memakai waktu PostgreSQL dan melaporkan jumlah bucket kedaluwarsa yang dihapus. Pengulangan perintah aman. Operator dapat menjalankannya berkala pada lingkungan target.
+
+## Pemeriksaan tahap 09
 
 ```bash
 npm run lint
@@ -212,7 +224,7 @@ npm run test:integration
 
 Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa proses Next.js dan dapat menunggu window limiter berikutnya hingga satu menit. Tes transaksi memakai Route Handler produksi dan PostgreSQL dengan koneksi independen. Skenario meliputi pengiriman ulang, dua approval yang bersaing, approve-vs-reject, penerimaan paralel, kegagalan insert ledger, dan rekonsiliasi saldo menurut urutan posting.
 
-`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memeriksa keputusan petugas di ponsel, alasan penolakan, filter arah kartu stok, akses riwayat sesudah login ulang, dan alur tahap sebelumnya. Pembersihan bucket rate limit operasional dijadwalkan pada tahap 09.
+`npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai dua konteks browser untuk memeriksa pencabutan sesi saat role berubah, akses baru setelah login ulang, serta audit. Suite juga menjalankan regresi alur gudang.
 
 ### Proxy Nginx untuk produksi
 
@@ -250,7 +262,7 @@ Simpan direktif `proxy_set_header X-Warehouse-Proxy-Token "<secret-proxy>";` di 
 | --- | --- |
 | URL aplikasi / video demo | Belum tersedia |
 | Kredensial evaluator | Belum dibuat |
-| Hasil pengujian | Lihat log eksekusi tahap 01 di `PLAN.md` |
+| Hasil pengujian | Lihat log eksekusi per tahap di `PLAN.md` |
 | ZIP source aplikasi | Dijadwalkan pada tahap 10 |
 
 ## Referensi teknis
