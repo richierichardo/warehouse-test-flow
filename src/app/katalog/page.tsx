@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { inputClass, primaryClass, secondaryClass } from "@/components/operations-styles";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { getAuthRuntime } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
@@ -7,9 +8,6 @@ import { parseCatalogQuery, type CatalogItem, type CatalogQuery } from "@/module
 import { requireWorkspacePrincipal } from "@/modules/identity-access/workspace";
 
 const stockFormat = new Intl.NumberFormat("id-ID");
-const controlClass = "h-11 w-full min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700";
-const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md bg-[#136760] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e514c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700";
-const secondaryClass = "inline-flex min-h-10 items-center justify-center rounded-md border px-3 py-2 text-sm font-medium hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700";
 
 function catalogHref(query: CatalogQuery, page: number) {
   const params = new URLSearchParams();
@@ -27,25 +25,27 @@ function ItemEditLink({ item }: { item: CatalogItem }) {
 
 function CatalogFilters({ query }: { query: CatalogQuery }) {
   return (
-    <form method="get" action="/katalog" aria-label="Filter katalog" className="grid gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-[minmax(14rem,1fr)_9rem_9rem_auto] xl:items-end">
-      <div className="space-y-2">
+    <form method="get" action="/katalog" aria-label="Filter katalog" className="grid items-end gap-4 rounded-2xl border bg-card p-5 sm:grid-cols-2 sm:gap-5 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(9rem,0.46fr)_minmax(9rem,0.46fr)]">
+      <div className="min-w-0 space-y-2 sm:col-span-2 xl:col-span-1">
         <label htmlFor="catalog-search" className="block text-sm font-medium">Cari kode atau nama</label>
-        <input id="catalog-search" name="q" type="search" maxLength={100} defaultValue={query.q} className={controlClass} />
+        <input id="catalog-search" name="q" type="search" maxLength={100} defaultValue={query.q} className={inputClass} />
       </div>
       <div className="space-y-2">
         <label htmlFor="catalog-sort" className="block text-sm font-medium">Urutkan</label>
-        <select id="catalog-sort" name="sort" defaultValue={query.sort} className={controlClass}>
+        <select id="catalog-sort" name="sort" defaultValue={query.sort} className={inputClass}>
           <option value="code">Kode</option><option value="name">Nama</option><option value="stock">Stok</option>
         </select>
       </div>
       <div className="space-y-2">
         <label htmlFor="catalog-direction" className="block text-sm font-medium">Arah</label>
-        <select id="catalog-direction" name="direction" defaultValue={query.direction} className={controlClass}>
+        <select id="catalog-direction" name="direction" defaultValue={query.direction} className={inputClass}>
           <option value="asc">Menaik</option><option value="desc">Menurun</option>
         </select>
       </div>
       {query.limit !== 20 && <input type="hidden" name="limit" value={query.limit} />}
-      <button type="submit" className={primaryClass}>Cari</button>
+      <div className="col-span-full border-t pt-4">
+        <button type="submit" className={primaryClass}>Cari</button>
+      </div>
     </form>
   );
 }
@@ -53,7 +53,7 @@ function CatalogFilters({ query }: { query: CatalogQuery }) {
 function CatalogItems({ items, canEdit }: { items: CatalogItem[]; canEdit: boolean }) {
   return (
     <>
-      <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
+      <div className="hidden overflow-x-auto rounded-2xl border bg-card md:block">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Daftar barang</caption>
           <thead className="bg-slate-50 text-muted-foreground">
@@ -68,7 +68,7 @@ function CatalogItems({ items, canEdit }: { items: CatalogItem[]; canEdit: boole
           </thead>
           <tbody className="divide-y">
             {items.map((item) => (
-              <tr key={item.id}>
+              <tr key={item.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-medium wrap-anywhere">{item.code}</td>
                 <td className="px-4 py-3 wrap-anywhere">{item.name}</td>
                 <td className="px-4 py-3 wrap-anywhere">{item.unit}</td>
@@ -80,9 +80,9 @@ function CatalogItems({ items, canEdit }: { items: CatalogItem[]; canEdit: boole
           </tbody>
         </table>
       </div>
-      <ul aria-label="Daftar barang" className="space-y-3 md:hidden">
+      <ul aria-label="Daftar barang" className="space-y-4 md:hidden">
         {items.map((item) => (
-          <li key={item.id} className="space-y-3 rounded-lg border bg-card p-4">
+          <li key={item.id} className="space-y-4 rounded-2xl border bg-card p-5">
             <div className="space-y-1">
               <h2 className="font-semibold wrap-anywhere">{item.name}</h2>
               <p className="text-sm text-muted-foreground wrap-anywhere">{item.code}</p>

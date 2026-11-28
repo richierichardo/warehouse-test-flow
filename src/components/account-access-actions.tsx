@@ -49,6 +49,7 @@ export function AccountAccessActions({ account }: { account: AdminAccount }) {
         credentials: "same-origin", redirect: "error", signal: AbortSignal.timeout(30_000),
       });
       if (response.status === 401) { window.location.replace("/login?reason=session-expired"); return; }
+      if (response.status >= 500) { setError("Layanan sementara tidak tersedia."); return; }
       if (response.status === 429) {
         const wait = response.headers.get("Retry-After");
         setError(wait ? `Coba lagi setelah ${wait} detik.` : "Terlalu banyak permintaan. Coba lagi nanti.");

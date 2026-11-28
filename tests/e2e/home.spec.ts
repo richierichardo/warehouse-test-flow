@@ -62,7 +62,7 @@ async function login(page: Page, email: string) {
     page.getByRole("button", { name: "Masuk" }).click(),
   ]);
   expect(response.status()).toBe(200);
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/ruang-kerja");
 }
 
 const expectedMenus = {
@@ -222,7 +222,7 @@ test("petugas membuat barang dengan stok nol dan mengedit metadata dari katalog"
 
 test("menampilkan login dan sesi kedaluwarsa dengan ruang kerja yang pas di ponsel", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/ruang-kerja");
   await expect(page).toHaveURL("/login");
   await expect(page.locator("html")).toHaveAttribute("lang", "id");
   await expect(page.getByRole("heading", { name: "Masuk" })).toBeVisible();
@@ -269,7 +269,7 @@ test("petugas mencatat penerimaan dan melihat saldo di kartu stok pada ponsel", 
   let firstKey: string | undefined;
   await page.route("**/api/receipts", async (route) => {
     firstKey = route.request().headers()["idempotency-key"];
-    await route.fulfill({ status: 503, json: { error: { message: "Layanan sementara tidak tersedia." } } });
+    await route.fulfill({ status: 503, json: { error: { message: "Internal database detail" } } });
   });
   await page.getByRole("button", { name: "Simpan penerimaan" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Layanan sementara tidak tersedia." })).toBeVisible();

@@ -49,7 +49,7 @@ async function login(page: Page, email: string) {
     page.getByRole("button", { name: "Masuk" }).click(),
   ]);
   expect(response.status()).toBe(200);
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/ruang-kerja");
 }
 
 test("perubahan akses dan pencabutan sesi berlaku pada konteks browser pengguna lain", async ({ page, browser, baseURL }) => {

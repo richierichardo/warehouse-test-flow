@@ -33,8 +33,8 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
           {hasPermission(principal.role, "request:create") && <Link href="/permintaan/baru" prefetch={false} className={primaryClass}>Buat permintaan</Link>}
         </div>
         {parsed.success && result ? <>
-          <form key={requestPageHref(parsed.data, 1)} method="get" action="/permintaan" aria-label="Filter permintaan" className="flex flex-wrap items-end gap-3 rounded-lg border bg-card p-4">
-            <div className="min-w-40 space-y-2">
+          <form key={requestPageHref(parsed.data, 1)} method="get" action="/permintaan" aria-label="Filter permintaan" className="flex flex-wrap items-end gap-4 rounded-2xl border bg-card p-5 sm:p-6">
+            <div className="w-full space-y-2 sm:w-56">
               <label htmlFor="request-status-filter" className="block text-sm font-medium">Status</label>
               <select id="request-status-filter" name="status" className={inputClass} defaultValue={parsed.data.status ?? ""}>
                 <option value="">Semua status</option>
@@ -46,9 +46,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
             {(parsed.data.status || parsed.data.page > 1 || parsed.data.limit !== 20) && <Link className={secondaryClass} href="/permintaan" prefetch={false}>Reset</Link>}
           </form>
           {result.data.length ? (
-            <ul aria-label="Daftar permintaan" className="space-y-3">
+            <ul aria-label="Daftar permintaan" className="space-y-4">
               {result.data.map((entry) => (
-                <li key={entry.id} className="space-y-3 rounded-lg border bg-card p-4 sm:p-5">
+                <li key={entry.id} className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 space-y-1">
                       <h2 className="font-semibold wrap-anywhere">{entry.item.name}</h2>

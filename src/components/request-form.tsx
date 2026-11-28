@@ -46,6 +46,7 @@ export function RequestForm() {
       });
       if (response.status === 401) return window.location.replace("/login?reason=session-expired");
       if (response.status === 403) return window.location.replace("/akses-ditolak");
+      if (response.status >= 500) return setError("Layanan sementara tidak tersedia.");
       if (response.status === 429) {
         const wait = response.headers.get("Retry-After");
         setError(wait ? `Coba lagi setelah ${wait} detik.` : "Terlalu banyak permintaan. Coba lagi nanti.");

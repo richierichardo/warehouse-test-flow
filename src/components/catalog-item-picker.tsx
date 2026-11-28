@@ -46,7 +46,7 @@ export function CatalogItemPicker({ initialItem, onSelect }: { initialItem?: Ite
   return (
     <div className="min-w-0 space-y-2">
       <label htmlFor={searchId} className="block text-sm font-medium">Cari barang berdasarkan kode atau nama</label>
-      <div className="flex flex-wrap gap-2 sm:flex-nowrap">
+      <div className="flex flex-wrap gap-3 sm:flex-nowrap">
         <input id={searchId} type="search" maxLength={100} className={inputClass} value={query} disabled={!hydrated}
           onChange={(event) => setQuery(event.currentTarget.value)} onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -63,7 +63,7 @@ export function CatalogItemPicker({ initialItem, onSelect }: { initialItem?: Ite
         <ul aria-label="Hasil pencarian barang" className="max-h-56 divide-y overflow-auto rounded-md border">
           {items.map((item) => (
             <li key={item.id}>
-              <button type="button" aria-pressed={item.id === selected?.id} className="w-full wrap-anywhere px-3 py-2 text-left text-sm hover:bg-slate-50 aria-pressed:bg-teal-50"
+              <button type="button" aria-pressed={item.id === selected?.id} className="min-h-11 w-full wrap-anywhere px-3 py-2.5 text-left text-sm hover:bg-slate-50 aria-pressed:bg-teal-50"
                 onClick={() => { setSelected(item); setItems([]); setMessage(""); onSelect?.(item); }}>
                 {item.code} · {item.name} · {item.unit}
               </button>

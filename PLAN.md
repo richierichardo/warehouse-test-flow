@@ -1,6 +1,6 @@
 # Implementation Plan — 10 Tahap
 
-Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–09 sudah diimplementasikan. Tahap 10 berstatus `TODO`.
+Rencana bertanggal 26 November 2026. Deadline pengumpulan 28 November 2026 pukul 23.59 WIB. Tahap 01–10 selesai sesuai log eksekusi. Paket pengumpulan lokal memakai jalur video demo.
 
 ## Aturan pengerjaan
 
@@ -200,7 +200,7 @@ Regresi AC17–AC21 mencakup kuota lintas proses dan restart, pergantian window,
 
 ## Tahap 10 — QA, deployment/demo dan pengumpulan
 
-Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
+Status: DONE | Commit aktual: —
 
 **Kerja**
 - Jalankan lint/typecheck/unit/integration/e2e/build; browser QA tiga role dan seluruh alur inti.
@@ -215,6 +215,33 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 - Semua kebutuhan wajib PDF terpetakan ke acceptance criteria dan bukti demonstrasi.
 - Tidak ada checkbox lulus atau hasil deploy yang direkayasa. Pengumpulan final dilakukan melalui destination yang diberikan user.
 
+### Pemetaan bukti Tahap 10
+
+| Kebutuhan | AC | Verifikasi |
+| --- | --- | --- |
+| Login/logout, signup tertutup, status dan role terkini | AC01–AC03 | [HTTP auth](tests/integration/auth-http.test.ts), [HTTP admin](tests/integration/admin-http.test.ts), [browser tiga role](tests/e2e/home.spec.ts), [pencabutan sesi dari browser](tests/e2e/admin.spec.ts). Demo menampilkan logout, riwayat setelah login ulang, dan audit pencabutan sesi. |
+| Katalog stok nol, jumlah valid, penerimaan dan retry | AC04–AC07 | [HTTP katalog](tests/integration/catalog-http.test.ts), [HTTP penerimaan](tests/integration/receiving-http.test.ts), [validasi pengajuan](tests/integration/requisitions-http.test.ts). Demo menampilkan pembuatan barang, edit rak, dan penerimaan 10 unit. |
+| Pengajuan Menunggu tanpa reservasi dan akses pemilik | AC08–AC09 | [HTTP pengajuan](tests/integration/requisitions-http.test.ts), [akses HTTP bisnis](tests/integration/business-http.test.ts). Demo menampilkan pengajuan 7 unit dan stok tetap 10. |
+| Persetujuan, penolakan, konkurensi, dan rollback | AC10–AC16 | [HTTP keputusan dengan PostgreSQL](tests/integration/decisions-http.test.ts), [rollback penerimaan](tests/integration/receiving-http.test.ts). Demo menampilkan saldo 3 dan satu transaksi keluar, stok kurang, serta penolakan dengan saldo tetap. |
+| Kuota bersama, spoofing header, origin, dan body | AC17–AC19 | [HTTP auth](tests/integration/auth-http.test.ts), [HTTP bisnis](tests/integration/business-http.test.ts), [HTTP admin](tests/integration/admin-http.test.ts). |
+| Persistensi, batas superadmin, dan urutan kartu stok | AC20–AC22 | [Restart proses dan batas admin](tests/integration/admin-http.test.ts), [skenario kartu stok](tests/integration/receiving-http.test.ts), [penerimaan dan persetujuan paralel](tests/integration/decisions-http.test.ts), smoke dari hasil ekstrak ZIP. Demo menampilkan riwayat dan waktu posting WIB. |
+
+Verifikasi 28 November 2026 menggunakan Node.js 24.22.3, npm 11.19.1, PostgreSQL 17.11, dan basis kode `d8dc1df`. `lint`, `typecheck`, `test:unit` (103), `test:integration` (87), `build`, dan satu suite `test:e2e` penuh (10) lulus. Server Next yang dimulai oleh Playwright perlu dihentikan setelah seluruh tes selesai agar proses mengeluarkan ringkasan.
+
+Dari ekstraksi source baru, `npm ci` memasang 732 paket dari cache lokal dan menggunakan engine Prisma resmi yang sudah tersedia. Migrasi pertama berhasil dan migrasi kedua tidak memiliki pekerjaan tertunda. Seed tanpa opt-in dilewati. Dua seed opt-in menghasilkan total tiga akun, satu penerimaan, dan stok 25 untuk barang seed. Smoke HTTP membuat barang terpisah dan membuktikan saldo 0 → 10 → 3, satu mutasi masuk dan satu mutasi keluar, dan sesi logout ditolak. Setelah proses Next dan PostgreSQL dihidupkan ulang dengan direktori data yang sama, ketiga role bisa login dan membaca data sesuai izin.
+
+`docker compose config --quiet` lulus. Persistensi diuji dengan PostgreSQL portabel karena daemon Docker Windows tidak tersedia. Driver `pg` masih mengeluarkan peringatan deprecation pada beberapa operasi. Demo menggunakan aplikasi lokal dan data contoh.
+
+Rekaman browser dirender dengan Remotion menjadi `papi-warehouse-demo.mp4` (H.264) dan `papi-warehouse-demo.webm` (VP9). Metadata dan 2.703 frame pada masing-masing video berhasil dibaca, dengan durasi sekitar 1 menit 53 detik. `papi-warehouse-source.zip` diperiksa lewat manifest dan ekstraksi ulang 133 file. Hasil ekstrak melewati build dan smoke setelah restart. Pembaruan laporan akhir hanya mengubah dokumentasi. Semua berkas pengumpulan tersedia terpisah di `tmp/submission/` dan siap untuk diunggah.
+
+### Revisi antarmuka Warehouse Testing
+
+- Beranda publik menyediakan panduan tiap peran, FAQ, video WebM dengan cadangan MP4, dan tautan Masuk. Bagian Kontak mengambil nilai dari konfigurasi yang diisi pengelola. Tujuan setelah login adalah `/ruang-kerja`.
+- Layout filter Kartu Stok dan Penerimaan memisahkan pencarian, rentang tanggal, dan tindakan. Spasi di navigasi, Katalog, dan Permintaan diselaraskan untuk desktop dan ponsel.
+- Indikator dan panel diagnostik Next disembunyikan pada UI. Halaman gagal menyediakan pesan umum dan tombol **Coba lagi**. Form transaksi menampilkan pesan umum untuk kegagalan server, dan tombol masuk aktif ketika form siap menangani pengiriman.
+
+Verifikasi revisi meluluskan lint, typecheck, build dari ekstrak source, 103 unit test, dan 87 tes integrasi. Sepuluh skenario browser regresi lulus pada suite penuh. Dua tes beranda lulus pada pengujian terarah setelah penyesuaian selektor FAQ dan simulasi bundle yang tertunda. Browser memuat WebM di desktop dan ponsel. Saat PostgreSQL tes dihentikan, Kartu Stok menampilkan fallback tanpa rincian teknis. Tombol **Coba lagi** memulihkan halaman setelah PostgreSQL dinyalakan kembali. Revisi ZIP pengumpulan berisi 142 file termasuk aset demo beranda.
+
 ## Log eksekusi
 
 | Tahap | Status | Commit aktual | Command/bukti | Batasan |
@@ -228,4 +255,4 @@ Status: TODO | Commit: `docs: finalize tested setup demo and submission package`
 | 07 | DONE | `dd74d7d` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (84), `test:integration` (73), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Regresi browser penerimaan kembali mencatat peringatan deprecation driver `pg`. Perubahan diserahkan unstaged. |
 | 08 | DONE | `8da6fbf` | `db:migrate:deploy` pada dua database tes, `lint`, `typecheck`, `build`, `test:unit` (95), `test:integration` (81), dan `test:e2e` (9) berhasil. | Integrasi dan Playwright memakai database PostgreSQL 17.11 portabel terpisah. Playwright kembali mencatat peringatan deprecation driver `pg` tentang query yang masih berjalan. Perubahan diserahkan unstaged. |
 | 09 | DONE | — | `db:migrate:deploy`, `lint`, `typecheck`, `build`, `test:unit` (103), `test:integration` (87), dan 10 skenario browser. `test:e2e` meluluskan 8 skenario saat percobaan awal. Dua skenario yang tersisa lulus lewat `test:e2e -- --grep 'perubahan akses\|WAREHOUSE masuk'` setelah kompilasi route admin dilakukan sebelumnya dan penantian logout disesuaikan. | PostgreSQL 17.11 portabel pada dua database tes terpisah. Next development memuat ulang pada percobaan awal, dan driver `pg` masih mencatat peringatan deprecation pada regresi. Perubahan diserahkan unstaged. |
-| 10 | TODO | — | — | Belum dijalankan |
+| 10 | DONE | — | `npm ci`, `db:migrate:deploy` dua kali, seed tanpa opt-in dan dua kali dengan opt-in, `lint`, `typecheck`, `test:unit` (103), `test:integration` (87), `test:e2e` (10), `build`, smoke restart, `docker compose config --quiet`, verifikasi ZIP dan video MP4/WebM. | PostgreSQL 17.11 portabel, demo lokal, dan peringatan `pg` dicatat di atas. Perubahan diserahkan unstaged. |

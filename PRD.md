@@ -240,10 +240,12 @@ Auth memakai format response resmi library. Business API memakai `{ data, meta? 
 ## 11. UI dan pengalaman pengguna
 
 - Bahasa Indonesia, desktop-first yang tetap dapat dipakai pada ponsel; angka dengan pemisah lokal dan tanggal WIB.
+- Beranda publik Warehouse Testing menampilkan panduan, video demo, FAQ, dan tautan masuk. Kontak publik ditampilkan setelah dilengkapi pengelola. Setelah masuk, pengguna menuju ruang kerja yang memerlukan sesi.
 - Employee: katalog, form permintaan satu item, permintaan saya, detail/status.
 - Warehouse: katalog + form barang, penerimaan + riwayat, antrean permintaan/detail, kartu stok.
 - Superadmin: katalog read-only, riwayat read-only, akun dan audit akses.
 - Loading, empty, error, validation, session expired, forbidden, dan 429 memiliki tampilan eksplisit.
+- Gangguan tak terduga ditampilkan sebagai pesan umum dan pilihan untuk memuat ulang. Pesan validasi, izin, dan status bisnis tetap membantu pengguna memperbaiki langkahnya.
 - Tombol submit disabled selama pending; dialog konfirmasi approval/rejection; server tetap memegang jaminan anti-duplikasi.
 - Label status Menunggu/Disetujui/Ditolak ditampilkan sebagai teks, bukan warna saja. Form memiliki label, error terkait field, keyboard focus dan kontras memadai.
 - Sediakan sorting/filter/pagination sederhana; hindari dashboard dekoratif sebelum alur wajib selesai.

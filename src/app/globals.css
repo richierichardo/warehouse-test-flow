@@ -32,4 +32,9 @@
   body {
     @apply min-h-screen bg-background font-sans text-foreground antialiased;
   }
+
+  /* Diagnostik Next.js tetap tersedia di terminal saat development. */
+  nextjs-portal {
+    display: none;
+  }
 }

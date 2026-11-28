@@ -46,31 +46,35 @@ type HistoryProps = {
 
 export function StockHistory({ path, title, rangeLabel, canReceive, movementFilter, listing }: HistoryProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 sm:space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
         {canReceive && <Link className={primaryClass} href="/penerimaan/baru" prefetch={false}>Catat penerimaan</Link>}
       </div>
       {listing ? <>
-        <form key={historyHref(path, listing.query, 1)} method="get" action={path} aria-label={`Filter ${title.toLowerCase()}`} className="grid items-end gap-4 rounded-lg border bg-card p-4 sm:grid-cols-2 xl:grid-cols-[minmax(12rem,2fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]">
-          <CatalogItemPicker initialItem={listing.query.itemId ? listing.item ?? { id: listing.query.itemId } : undefined} />
-          <label className="space-y-2 text-sm font-medium">
-            <span>{rangeLabel} mulai</span>
-            <input name="from" type="date" className={inputClass} defaultValue={listing.query.from} />
-          </label>
-          <label className="space-y-2 text-sm font-medium">
-            <span>{rangeLabel} sampai</span>
-            <input name="to" type="date" className={inputClass} defaultValue={listing.query.to} />
-          </label>
-          {movementFilter && <div className="space-y-2">
-            <label htmlFor="movement-direction" className="block text-sm font-medium">Arah mutasi</label>
-            <select id="movement-direction" className={inputClass} name="direction" defaultValue={listing.query.direction ?? ""}>
-              <option value="">Semua arah</option>
-              {Object.entries(movementDirectionLabels).map(([direction, label]) => <option key={direction} value={direction}>{label}</option>)}
-            </select>
-          </div>}
+        <form key={historyHref(path, listing.query, 1)} method="get" action={path} aria-label={`Filter ${title.toLowerCase()}`} className="space-y-5 rounded-2xl border bg-card p-5 sm:space-y-6 sm:p-6 lg:p-7">
+          <div className="max-w-xl">
+            <CatalogItemPicker initialItem={listing.query.itemId ? listing.item ?? { id: listing.query.itemId } : undefined} />
+          </div>
+          <div className={`grid items-end gap-4 sm:grid-cols-2 sm:gap-5 ${movementFilter ? "xl:grid-cols-3" : ""}`}>
+            <label className="block min-w-0 space-y-2 text-sm font-medium">
+              <span className="block">{rangeLabel} mulai</span>
+              <input name="from" type="date" className={inputClass} defaultValue={listing.query.from} />
+            </label>
+            <label className="block min-w-0 space-y-2 text-sm font-medium">
+              <span className="block">{rangeLabel} sampai</span>
+              <input name="to" type="date" className={inputClass} defaultValue={listing.query.to} />
+            </label>
+            {movementFilter && <div className="min-w-0 space-y-2">
+              <label htmlFor="movement-direction" className="block text-sm font-medium">Arah mutasi</label>
+              <select id="movement-direction" className={inputClass} name="direction" defaultValue={listing.query.direction ?? ""}>
+                <option value="">Semua arah</option>
+                {Object.entries(movementDirectionLabels).map(([direction, label]) => <option key={direction} value={direction}>{label}</option>)}
+              </select>
+            </div>}
+          </div>
           {listing.query.limit !== 20 && <input type="hidden" name="limit" value={listing.query.limit} />}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 border-t pt-4 sm:pt-5">
             <button className={primaryClass} type="submit">Terapkan filter</button>
             {(listing.query.itemId || listing.query.from || listing.query.to || listing.query.direction || listing.query.page > 1 || listing.query.limit !== 20) && (
               <Link className={secondaryClass} href={path} prefetch={false}>Reset</Link>
@@ -78,7 +82,7 @@ export function StockHistory({ path, title, rangeLabel, canReceive, movementFilt
           </div>
         </form>
         {listing.entries.length > 0 ? (
-          <ul aria-label={`Daftar ${title.toLowerCase()}`} className="space-y-3">{listing.entries}</ul>
+          <ul aria-label={`Daftar ${title.toLowerCase()}`} className="space-y-4">{listing.entries}</ul>
         ) : (
           <div className="space-y-2 rounded-lg border bg-card p-6 text-sm text-muted-foreground">
             <p>{listing.meta.total ? "Halaman ini tidak memuat hasil." : "Belum ada catatan yang cocok."}</p>
@@ -106,13 +110,13 @@ export function StockHistory({ path, title, rangeLabel, canReceive, movementFilt
 
 export function HistoryEntry({ title, reference, fields }: { title: string; reference: string | null; fields: ReadonlyArray<readonly [string, ReactNode]> }) {
   return (
-    <li className="space-y-3 rounded-lg border bg-card p-4 sm:p-5">
-      <div className="space-y-1">
-        <h2 className="font-semibold wrap-anywhere">{title}</h2>
-        {reference && <p className="wrap-anywhere text-sm text-muted-foreground">{reference}</p>}
+    <li className="space-y-4 rounded-2xl border bg-card p-5 sm:space-y-5 sm:p-6">
+      <div className="space-y-1.5">
+        <h2 className="text-lg leading-snug font-semibold wrap-anywhere">{title}</h2>
+        {reference && <p className="wrap-anywhere font-mono text-sm text-muted-foreground">{reference}</p>}
       </div>
-      <dl className="grid grid-cols-2 gap-4 border-t pt-3 text-sm lg:grid-cols-4">
-        {fields.map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-muted-foreground">{label}</dt><dd className="wrap-anywhere font-medium">{value}</dd></div>)}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-5 border-t pt-4 text-sm sm:gap-x-7 sm:pt-5 xl:grid-cols-4">
+        {fields.map(([label, value]) => <div key={label} className="min-w-0 space-y-1"><dt className="text-muted-foreground">{label}</dt><dd className="wrap-anywhere font-semibold">{value}</dd></div>)}
       </dl>
     </li>
   );

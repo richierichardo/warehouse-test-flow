@@ -105,7 +105,7 @@ npm run db:migrate:deploy
 npm run dev
 ```
 
-Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. Masuk dengan akun yang dibuat melalui seed. [Halaman login lokal](http://localhost:3000/login)
+Compose menerbitkan PostgreSQL 17 pada `127.0.0.1:5433` dan menyimpan data dalam volume `postgres_data`. Jika memakai PostgreSQL 17 UTF-8 yang sudah berjalan, arahkan `DATABASE_URL` ke database proyek tersebut sebelum menjalankan migrasi. Buka beranda lalu masuk dengan akun yang dibuat melalui seed. [Beranda lokal](http://localhost:3000/)
 
 `dev` dan `build` memakai Webpack karena build jalur auth memicu error source map Turbopack pada lingkungan Windows yang diuji.
 
@@ -145,7 +145,9 @@ Request POST memerlukan `Origin` yang sama dengan `APP_ORIGIN`. Set `BETTER_AUTH
 
 ### Ruang kerja dan izin
 
-Ruang kerja memeriksa session dan izin di server pada setiap halaman. Karyawan melihat menu Katalog dan Permintaan Saya. Petugas gudang melihat Katalog, Penerimaan, Permintaan, dan Kartu Stok. Superadmin mendapat area baca untuk operasi gudang serta menu Akun dan Audit. Halaman yang modulnya masih dijadwalkan menampilkan status belum tersedia.
+Beranda publik `/` menampilkan panduan dan FAQ berbahasa Indonesia serta demo WebM dengan format cadangan MP4. Isi email atau nomor telepon di [konfigurasi kontak](src/app/landing-contact.ts) untuk menampilkan bagian Kontak. Pengguna yang berhasil masuk menuju `/ruang-kerja`.
+
+Ruang kerja memeriksa session dan izin di server pada setiap halaman. Karyawan melihat menu Katalog dan Permintaan Saya. Petugas gudang melihat Katalog, Penerimaan, Permintaan, dan Kartu Stok. Superadmin mendapat area baca untuk operasi gudang serta menu Akun dan Audit.
 
 `withBusinessHandler()` menggabungkan guard origin, session, izin, validasi JSON, dan kuota PostgreSQL untuk endpoint bisnis. Repository permintaan menerapkan scope pemilik pada daftar, jumlah hasil, dan detail karyawan.
 
@@ -201,7 +203,7 @@ Superadmin membuka **Akun** untuk mengubah role atau status aktif, dan menggunak
 
 Jalankan `npm run limiter:cleanup` dengan `DATABASE_URL` lingkungan yang akan dirawat. Perintah memakai waktu PostgreSQL dan melaporkan jumlah bucket kedaluwarsa yang dihapus. Pengulangan perintah aman. Operator dapat menjalankannya berkala pada lingkungan target.
 
-## Pemeriksaan tahap 09
+## Pemeriksaan akhir
 
 ```bash
 npm run lint
@@ -226,6 +228,8 @@ Jalankan `npm run build` sebelum tes integrasi. Tes auth menjalankan beberapa pr
 
 `npm run test:e2e` memakai `TEST_DATABASE_URL` dan menyalakan Next.js development pada `127.0.0.1:3100`. Jalankan integrasi dan Playwright secara berurutan jika keduanya memakai database tes yang sama. Playwright memakai dua konteks browser untuk memeriksa pencabutan sesi saat role berubah, akses baru setelah login ulang, serta audit. Suite juga menjalankan regresi alur gudang.
 
+Verifikasi 28 November 2026 meluluskan lint, typecheck, build, 103 unit test, 87 tes integrasi, serta 10 tes browser regresi dan 2 tes beranda. Smoke dari ekstraksi ZIP membuktikan migrasi terulang, seed opt-in idempoten, serta data transaksi bertahan setelah restart Next.js dan PostgreSQL 17.11. Pemeriksaan konfigurasi Compose lulus. Persistensi diuji dengan PostgreSQL portabel karena daemon Docker lokal tidak tersedia. Driver `pg` masih mengeluarkan peringatan deprecation pada beberapa operasi.
+
 ### Proxy Nginx untuk produksi
 
 Gunakan `TRUSTED_PROXY_MODE=nginx` dan buat `TRUSTED_PROXY_SECRET` dengan perintah pembuat secret 64 digit hex di atas. Jalankan `npm run start` pada loopback dan gunakan blok berikut pada virtual host HTTPS yang memiliki origin sesuai konfigurasi aplikasi.
@@ -246,24 +250,28 @@ location / {
 }
 ```
 
-Simpan direktif `proxy_set_header X-Warehouse-Proxy-Token "<secret-proxy>";` di file include privat di server. Gunakan nilai yang sama dengan `TRUSTED_PROXY_SECRET` aplikasi. Mode `direct` dan request dengan bukti proxy yang tidak sah memakai kuota bersama. Konfigurasi virtual host dan TLS divalidasi saat deployment tahap 10.
+Simpan direktif `proxy_set_header X-Warehouse-Proxy-Token "<secret-proxy>";` di file include privat di server. Gunakan nilai yang sama dengan `TRUSTED_PROXY_SECRET` aplikasi. Mode `direct` dan request dengan bukti proxy yang tidak sah memakai kuota bersama. Verifikasi virtual host dan TLS saat memilih jalur deployment.
 
-## Deployment dan pengumpulan
+## Pengumpulan
+
+Paket ini memakai jalur video demo dari soal. ZIP source dan video tersedia sebagai berkas terpisah di `tmp/submission/` pada workspace pengumpulan. Akun demo lokal dibuat melalui seed opt-in sesuai petunjuk setup.
+
+| Berkas | Kegunaan |
+| --- | --- |
+| `papi-warehouse-source.zip` | Source aplikasi, aset demo untuk beranda, lockfile, migrasi, tes, dokumentasi, dan `.env.example` |
+| `papi-warehouse-demo.mp4` | Video demo dalam MP4 untuk pengumpulan |
+| `papi-warehouse-demo.webm` | Versi WebM untuk pemutaran di web |
+
+Video berdurasi sekitar 1 menit 53 detik dan dirender dengan Remotion dari rekaman browser. Petugas membuat dan mengedit barang, mencatat penerimaan 10 unit, memproses permintaan 7 unit sampai saldo 3, dan menangani stok kurang. Karyawan melihat riwayat setelah masuk ulang. Superadmin mencabut sesi dan melihat bukti audit. Pemetaan AC01–AC22 dan hasil verifikasi tercatat di [PLAN.md](PLAN.md#pemetaan-bukti-tahap-10).
+
+### Jika aplikasi akan dideploy
 
 - Jalankan migrasi production melalui script `db:migrate:deploy`; jangan `db push` atau seed demo otomatis saat startup.
 - Jalankan Next.js pada interface privat/loopback di balik Nginx HTTPS. Tutup akses publik langsung ke Node dan PostgreSQL.
 - Nginx menghapus/mengganti header IP yang dapat dipalsukan klien. Auth dan limiter memakai parser trusted proxy yang sama.
 - Private response memakai `Cache-Control: private, no-store`; hindari shared cache data akun, session, permintaan, dan saldo.
 - Verifikasi data bertahan setelah proses aplikasi restart dan setelah logout/login.
-- Siapkan URL dan akun evaluator melalui saluran pengumpulan. Jangan commit password production/demo deployed ke repository publik.
-- ZIP source menyertakan kode, lockfile, migrasi, dokumen, `.env.example`, dan instruksi; mengecualikan `.env`, dump DB, log, `.next`, dan `node_modules`.
-
-| Bukti pengumpulan | Status |
-| --- | --- |
-| URL aplikasi / video demo | Belum tersedia |
-| Kredensial evaluator | Belum dibuat |
-| Hasil pengujian | Lihat log eksekusi per tahap di `PLAN.md` |
-| ZIP source aplikasi | Dijadwalkan pada tahap 10 |
+- Bagikan URL dan akun evaluator melalui saluran pengumpulan. Simpan password di luar repository.
 
 ## Referensi teknis
 

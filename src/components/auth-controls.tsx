@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type SubmitEvent } from "react";
+import { useHydrated } from "./use-hydrated";
 
 function useAuthSubmit(path: string, destination: string) {
   const [pending, setPending] = useState(false);
@@ -64,7 +65,8 @@ function useAuthSubmit(path: string, destination: string) {
 const inputClass = "h-12 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700";
 
 export function LoginForm() {
-  const { submit, pending, error, retrySeconds, disabled } = useAuthSubmit("/api/auth/sign-in/email", "/");
+  const hydrated = useHydrated();
+  const { submit, pending, error, retrySeconds, disabled } = useAuthSubmit("/api/auth/sign-in/email", "/ruang-kerja");
 
   function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -84,7 +86,7 @@ export function LoginForm() {
       </div>
       {error && <p className="text-sm text-red-800" role="alert">{error}</p>}
       {retrySeconds > 0 && <p className="text-sm text-amber-900" role="status">Coba lagi dalam {retrySeconds} detik.</p>}
-      <button type="submit" disabled={disabled} className="h-12 w-full rounded-md bg-[#136760] px-4 text-sm font-semibold text-white hover:bg-[#0e514c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-60">
+      <button type="submit" disabled={!hydrated || disabled} className="h-12 w-full rounded-md bg-[#136760] px-4 text-sm font-semibold text-white hover:bg-[#0e514c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-60">
         {pending ? "Sedang masuk…" : "Masuk"}
       </button>
     </form>
