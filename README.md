@@ -252,6 +252,31 @@ location / {
 
 Simpan direktif `proxy_set_header X-Warehouse-Proxy-Token "<secret-proxy>";` di file include privat di server. Gunakan nilai yang sama dengan `TRUSTED_PROXY_SECRET` aplikasi. Mode `direct` dan request dengan bukti proxy yang tidak sah memakai kuota bersama. Verifikasi virtual host dan TLS saat memilih jalur deployment.
 
+### CI/CD
+
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) mengikuti pola deploy Porto: lint, typecheck, unit test, dan build di GitHub Actions; push ke `main` yang hijau mengunggah artifact ke VPS lalu menjalankan migrasi dan restart. Integrasi dan e2e tetap dijalankan lokal (membutuhkan PostgreSQL/browser). Seed demo **tidak** dijalankan dari CI.
+
+**Secrets** (Settings → Secrets and variables → Actions; environment `production` untuk job deploy). Bila VPS sama dengan Porto, salin `SSH_*` dari repo itu; hanya `DEPLOY_PATH` yang berbeda:
+
+| Secret | Sumber |
+| --- | --- |
+| `SSH_HOST` | IP atau hostname VPS |
+| `SSH_PORT` | Port SSH (biasanya `22`) |
+| `SSH_USER` | User SSH yang public key-nya ada di `~/.ssh/authorized_keys` |
+| `SSH_PRIVATE_KEY` | Private key pasangan (dari laptop / key deploy; bukan file di dalam VPS) |
+| `SSH_FINGERPRINT` | Host key `SHA256:...` dari `ssh-keyscan -p PORT HOST` |
+| `DEPLOY_PATH` | Root aplikasi, misalnya `/var/www/apps/warehouse` |
+
+**Satu kali di VPS**
+
+1. Buat database PostgreSQL kosong dan user; `migrate` tidak membuat database.
+2. Buat `DEPLOY_PATH`, tulis `.env` production di situ (HTTPS `APP_ORIGIN` / `BETTER_AUTH_URL`, `TRUSTED_PROXY_MODE=nginx`, secret yang selaras dengan Nginx). Jangan commit `.env`.
+3. Pasang unit systemd dari [`deploy/warehouse.service`](deploy/warehouse.service) (sesuaikan `User` dan path), lalu `systemctl enable warehouse`.
+4. Izinkan user SSH menjalankan `sudo systemctl restart warehouse` tanpa password interaktif.
+5. Konfigurasi Nginx + TLS sesuai blok di atas; Node hanya di `127.0.0.1:3000`.
+
+**Alur rilis:** Actions membangun tarball (`.next`, `prisma`, `public`, lockfile, tanpa `.env`) → SCP ke `$DEPLOY_PATH/releases/<sha>` → [`deploy/activate-release.sh`](deploy/activate-release.sh) menjalankan `npm ci --omit=dev`, `db:migrate:deploy`, symlink `current`, dan `systemctl restart warehouse`. Dua release terbaru dipertahankan.
+
 ## Pengumpulan
 
 Paket ini memakai jalur video demo dari soal. ZIP source dan video tersedia sebagai berkas terpisah di `tmp/submission/` pada workspace pengumpulan. Akun demo lokal dibuat melalui seed opt-in sesuai petunjuk setup.
@@ -266,7 +291,7 @@ Video berdurasi sekitar 1 menit 53 detik dan dirender dengan Remotion dari rekam
 
 ### Jika aplikasi akan dideploy
 
-- Jalankan migrasi production melalui script `db:migrate:deploy`; jangan `db push` atau seed demo otomatis saat startup.
+- Migrasi production dijalankan oleh langkah activate CI (`db:migrate:deploy`) atau manual dengan script yang sama; jangan `db push` atau seed demo otomatis saat startup.
 - Jalankan Next.js pada interface privat/loopback di balik Nginx HTTPS. Tutup akses publik langsung ke Node dan PostgreSQL.
 - Nginx menghapus/mengganti header IP yang dapat dipalsukan klien. Auth dan limiter memakai parser trusted proxy yang sama.
 - Private response memakai `Cache-Control: private, no-store`; hindari shared cache data akun, session, permintaan, dan saldo.

@@ -1,0 +1,20 @@
+[Unit]
+Description=Warehouse Office Supplies
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/apps/warehouse/current
+Environment=NODE_ENV=production
+# Next.js juga membaca .env dari WorkingDirectory (symlink ke ../.env).
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+# Batasi akses langsung; Nginx mem-proxy ke 127.0.0.1:3000.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

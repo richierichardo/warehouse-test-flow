@@ -1,0 +1,157 @@
+name: Warehouse CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "prisma/**"
+      - "public/**"
+      - "deploy/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.mjs"
+      - "prisma.config.ts"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "postcss.config.mjs"
+      - ".github/workflows/ci-cd.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "prisma/**"
+      - "public/**"
+      - "deploy/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.mjs"
+      - "prisma.config.ts"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "postcss.config.mjs"
+      - ".github/workflows/ci-cd.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warehouse-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    env:
+      # Placeholder untuk typecheck/build CI; runtime production memakai .env di VPS.
+      # Jangan set NODE_ENV=production di sini agar npm ci tetap memasang devDependencies.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/warehouse_ci
+      BETTER_AUTH_SECRET: "0123456789abcdef0123456789abcdef"
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      APP_ORIGIN: http://127.0.0.1:3000
+      RATE_LIMIT_KEY_SECRET: "fedcba9876543210fedcba9876543210"
+      TRUSTED_PROXY_MODE: direct
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.3"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Pack release artifact
+        run: |
+          mkdir -p release
+          cp package.json package-lock.json next.config.mjs prisma.config.ts release/
+          cp -a prisma public .next release/
+          mkdir -p release/deploy
+          cp deploy/activate-release.sh release/deploy/
+          if [ -d src/generated ]; then
+            mkdir -p release/src
+            cp -a src/generated release/src/
+          fi
+          tar -czf warehouse-release.tar.gz -C release .
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warehouse-release
+          path: warehouse-release.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build-test
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.build-test.result == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: warehouse-release
+
+      - name: Prepare remote release directory
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          script: |
+            set -euo pipefail
+            mkdir -p "${{ secrets.DEPLOY_PATH }}/releases/${{ github.sha }}"
+
+      - name: Upload release tarball
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          source: warehouse-release.tar.gz
+          target: ${{ secrets.DEPLOY_PATH }}/releases/${{ github.sha }}
+          overwrite: true
+
+      - name: Extract, migrate, and activate
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          script: |
+            set -euo pipefail
+            RELEASE_DIR="${{ secrets.DEPLOY_PATH }}/releases/${{ github.sha }}"
+            cd "$RELEASE_DIR"
+            tar -xzf warehouse-release.tar.gz
+            rm -f warehouse-release.tar.gz
+            chmod +x deploy/activate-release.sh
+            ./deploy/activate-release.sh "${{ secrets.DEPLOY_PATH }}" "${{ github.sha }}"
